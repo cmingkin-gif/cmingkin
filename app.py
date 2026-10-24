@@ -22,9 +22,9 @@ os.environ["TZ"] = "Asia/Hong_Kong"
 if hasattr(time, "tzset"):
     time.tzset()
 
-# === 你的專屬 Telegram 資訊 ===
-TELEGRAM_TOKEN = "8814919382:AAEvbUic7bqtk_aXBeu5b6f7HRquJnOCzrs"
-CHAT_ID = "746157499"
+# === 你的專屬 Telegram 資訊 (從 GitHub Secrets 讀取) ===
+TELEGRAM_TOKEN = os.environ.get("TG_TOKEN")
+CHAT_ID = os.environ.get("TG_CHAT_ID")
 
 # ⚡ 鎖定為 True：初盤與即場凱利均採用「即場市場平均勝率」計算，100% 吻合球探網畫面
 USE_TITAN_KELLY_MODE = True
