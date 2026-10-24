@@ -26,6 +26,7 @@ if hasattr(time, "tzset"):
 TELEGRAM_TOKEN = "8814919382:AAEvbUic7bqtk_aXBeu5b6f7HRquJnOCzrs"
 CHAT_ID = "746157499"
 
+# ⚡ 鎖定為 True：初盤與即場凱利均採用「即場市場平均勝率」計算，100% 吻合球探網畫面
 USE_TITAN_KELLY_MODE = True
 STATE_FILE = "recorded_state.json"
 recorded_matches = {}
