@@ -174,7 +174,7 @@ def process_single_match(match_info):
     except Exception: return None
 
 def fetch_main_page_html():
-    """專為 GitHub Actions 設計：極端無頭模式 + 忽略 Timeout 擷取"""
+    """專為 GitHub Actions 設計：最多自動重試 3 次，對抗跨國網絡偶發塞車"""
     options = Options()
     options.page_load_strategy = 'eager'
     options.add_argument("--headless=new")
@@ -183,40 +183,51 @@ def fetch_main_page_html():
     options.add_argument("--disable-gpu")
     options.add_argument("--disable-features=VizDisplayCompositor")
     options.add_argument("--disable-software-rasterizer")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument("--ignore-certificate-errors")
     options.add_argument("--blink-settings=imagesEnabled=false")
     options.add_argument("--window-size=1920,1080")
-    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
     
-    driver = None
-    try:
-        driver = webdriver.Chrome(options=options)
-        driver.set_page_load_timeout(15)
-        
+    for attempt in range(1, 4):
+        driver = None
         try:
-            driver.get("https://live.titan007.com/indexall_big.aspx")
-        except Exception:
-            print("⚠️ driver.get() 觸發超時，繼續檢查 DOM 是否已生成...", flush=True)
-
-        try:
-            WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, "//tr[starts-with(@id, 'tr1_')]")))
-        except Exception:
-            print("❌ 等待 5 秒仍未見賽事表格。", flush=True)
-
-        html = driver.page_source
-        if html and "tr1_" in html:
-            return html
-    except Exception as e:
-        print(f"❌ 瀏覽器嚴重錯誤: {e}")
-    finally:
-        if driver:
+            print(f"🌐 [第 {attempt}/3 次嘗試] 正在連線至球探網...", flush=True)
+            driver = webdriver.Chrome(options=options)
+            driver.set_page_load_timeout(20)
+            
             try:
-                driver.quit()
+                driver.get("https://live.titan007.com/indexall_big.aspx")
+            except Exception:
+                print("⚠️ 頁面載入觸發超時保護，直接檢查表格是否已生成...", flush=True)
+
+            try:
+                WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.XPATH, "//tr[starts-with(@id, 'tr1_')]"))
+                )
             except Exception:
                 pass
+
+            html = driver.page_source
+            if html and "tr1_" in html:
+                print(f"✅ 第 {attempt} 次嘗試成功抓取賽事列表！", flush=True)
+                return html
+            else:
+                print(f"⚠️ 第 {attempt} 次嘗試未見賽事表格，準備重試...", flush=True)
+        except Exception as e:
+            print(f"❌ 第 {attempt} 次瀏覽器異常: {e}", flush=True)
+        finally:
+            if driver:
+                try:
+                    driver.quit()
+                except Exception:
+                    pass
+        time.sleep(2)
+        
     return ""
 
 def run_scraper_once():
-    """單次執行邏輯，跑完即退出，交由 GitHub Actions 控制排程"""
+    """單次執行邏輯，跑完即退出，交由外部排程控制"""
     start_ts = time.time()
     current_scan_time = datetime.now()
     cleanup_old_records(current_scan_time)
@@ -225,7 +236,7 @@ def run_scraper_once():
     
     page_html = fetch_main_page_html()
     if not page_html:
-        print("❌ 無法獲取賽事列表，結束本次執行。", flush=True)
+        print("❌ 連續 3 次嘗試均無法獲取賽事列表，結束本次執行。", flush=True)
         return
 
     try:
