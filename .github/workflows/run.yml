@@ -1,10 +1,7 @@
 name: Pinna Scraper Auto Run
 
 on:
-  schedule:
-    # 全球統一分鐘：每小時的 00, 15, 30, 45 分準時觸發
-    - cron: '0,15,30,45 * * * *'
-  workflow_dispatch: # 保留手動測試按鈕
+  workflow_dispatch:
 
 jobs:
   scrape:
@@ -13,7 +10,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # 確保提取完整記錄，防止 Push 失敗
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -33,5 +30,4 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add recorded_state.json
-          # 完美防撞車機制：先拉取(pull)最新檔案，再推送(push)狀態
           git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update match state" && git pull --rebase origin main && git push)
