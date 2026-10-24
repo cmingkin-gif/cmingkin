@@ -2,35 +2,36 @@ name: Pinna Scraper Auto Run
 
 on:
   schedule:
+    # 全球統一分鐘：每小時的 00, 15, 30, 45 分準時觸發
     - cron: '0,15,30,45 * * * *'
-  workflow_dispatch:
+  workflow_dispatch: # 保留手動測試按鈕
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 確保提取完整記錄，防止 Push 失敗
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4 selenium urllib3
 
-    - name: Run Scraper
-      run: python app.py
+      - name: Run Scraper
+        run: python app.py
 
-    - name: Commit state file back to repo
-     run: |
-       git config --local user.email "action@github.com"
-       git config --local user.name "GitHub Action"
-       git add recorded_state.json
-       git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update match state" && git pull --rebase origin main && git push)
+      - name: Commit state file back to repo
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add recorded_state.json
+          # 完美防撞車機制：先拉取(pull)最新檔案，再推送(push)狀態
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update match state" && git pull --rebase origin main && git push)
