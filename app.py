@@ -22,7 +22,7 @@ os.environ["TZ"] = "Asia/Hong_Kong"
 if hasattr(time, "tzset"):
     time.tzset()
 
-# === Telegram 認證資訊 (由 GitHub Secrets 安全注入) ===
+# === 你的專屬 Telegram 資訊 (從 GitHub Secrets 讀取) ===
 TELEGRAM_TOKEN = os.environ.get("TG_TOKEN")
 CHAT_ID = os.environ.get("TG_CHAT_ID")
 
@@ -85,22 +85,14 @@ def save_state():
         print(f"⚠️ 儲存狀態失敗: {e}")
 
 def send_telegram_message(text):
-    if not TELEGRAM_TOKEN or not CHAT_ID:
-        print("⚠️ 找不到 TG_TOKEN 或 TG_CHAT_ID，跳過 Telegram 發送。", flush=True)
-        return
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     chunks = [text[i:i+3800] for i in range(0, len(text), 3800)]
     for chunk in chunks:
         payload = {"chat_id": CHAT_ID, "text": chunk}
         for _ in range(2):
             try:
-                res = session.post(url, json=payload, timeout=10)
-                if res.status_code == 200:
-                    break
-                else:
-                    print(f"⚠️ Telegram 發送回傳代碼: {res.status_code}, 內容: {res.text}", flush=True)
-            except Exception as e:
-                print(f"⚠️ Telegram 連線異常: {e}", flush=True)
+                if session.post(url, json=payload, timeout=10).status_code == 200: break
+            except Exception:
                 time.sleep(1)
 
 def cleanup_old_records(current_time):
@@ -236,9 +228,6 @@ def fetch_main_page_html():
 
 def run_scraper_once():
     """單次執行邏輯，跑完即退出，交由外部排程控制"""
-    # 🔔 測試通知：此行用於測試新 Token 是否能正常傳送訊息，驗證成功後可刪除或加上 # 註釋
-    send_telegram_message("🤖 系統連線測試：GitHub Secrets 與新 Telegram Token 連線完全正常！")
-
     start_ts = time.time()
     current_scan_time = datetime.now()
     cleanup_old_records(current_scan_time)
@@ -274,4 +263,50 @@ def run_scraper_once():
             if time_m:
                 hour, minute = map(int, time_m.group(1).split(':'))
                 match_dt = current_scan_time.replace(hour=hour, minute=minute, second=0, microsecond=0)
-                if match_dt > current_scan_time + timedelta(hours
+                if match_dt > current_scan_time + timedelta(hours=12): match_dt -= timedelta(days=1)
+                elif match_dt < current_scan_time - timedelta(hours=12): match_dt += timedelta(days=1)
+                formatted_time = match_dt.strftime('%Y-%m-%d %H:%M')
+
+            if match_dt + timedelta(minutes=115) < current_scan_time: continue
+                
+            match_infos.append({'match_id': match_id, 'league': tds[1].text.strip() if len(tds)>1 else "", 'time': formatted_time, 'match_dt': match_dt, 'home': home, 'away': away})
+            
+        print(f"🗑️ 過濾後剩餘 {len(match_infos)} 場進行 45 併發掃描...", flush=True)
+        
+        results = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=45) as executor:
+            future_to_match = {executor.submit(process_single_match, info): info for info in match_infos}
+            for future in concurrent.futures.as_completed(future_to_match, timeout=45):
+                res = future.result()
+                if res: results.append(res)
+                    
+        valid_alerts = []
+        for r in results:
+            m_id, is_qualifying, live_str = r['match_id'], r['is_qualifying'], r['liveStr']
+            if is_qualifying:
+                valid_alerts.append({'match_dt': r['info']['match_dt'], 'msg': f"🏆 {r['info']['league']} | ⏱ {r['info']['time']}\n⚽ {r['info']['home']} vs {r['info']['away']}\n📊 初[{r['initStr']}] ➔ 即[{live_str}]\n🔻 最低項跌: {r['hits_str']}"})
+                
+                prev = recorded_matches.get(m_id, {})
+                if not prev or prev.get('state') == 'unqualifying' or prev.get('live_str') != live_str:
+                    recorded_matches[m_id] = {'state': 'qualifying', 'live_str': live_str, 'updated_at': current_scan_time}
+                else: recorded_matches[m_id]['updated_at'] = current_scan_time
+            else:
+                if m_id in recorded_matches and recorded_matches[m_id]['state'] == 'qualifying':
+                    recorded_matches[m_id] = {'state': 'unqualifying', 'live_str': live_str, 'updated_at': current_scan_time}
+
+        save_state()
+        elapsed = round(time.time() - start_ts, 1)
+        
+        if valid_alerts:
+            valid_alerts.sort(key=lambda x: (x['match_dt'] < current_scan_time, x['match_dt']))
+            send_telegram_message("🚨 Pinna 最新凱利達標：\n\n" + "\n\n".join([x['msg'] for x in valid_alerts]))
+            print(f"✅ 成功發送 {len(valid_alerts)} 場通知！(總耗時: {elapsed} 秒)", flush=True)
+        else:
+            print(f"🎯 掃描完成！目前無達標賽事。(總耗時: {elapsed} 秒)", flush=True)
+
+    except Exception as e:
+        print(f"❌ 嚴重執行出錯: {e}", flush=True)
+
+if __name__ == "__main__":
+    load_state()
+    run_scraper_once()
