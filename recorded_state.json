@@ -230,9 +230,9 @@
     "updated_at": "2026-10-25T15:00:36.664799"
   },
   "3024490": {
-    "state": "qualifying",
-    "live_str": "0.97/1.00/0.88",
-    "updated_at": "2026-10-26T01:30:31.267213"
+    "state": "unqualifying",
+    "live_str": "0.96/1.02/0.89",
+    "updated_at": "2026-10-26T01:45:27.796725"
   },
   "3105538": {
     "state": "qualifying",
@@ -600,9 +600,9 @@
     "updated_at": "2026-10-25T22:15:23.609214"
   },
   "3010065": {
-    "state": "unqualifying",
-    "live_str": "0.88/0.91/0.95",
-    "updated_at": "2026-10-25T22:45:25.787607"
+    "state": "qualifying",
+    "live_str": "1.01/0.85/0.96",
+    "updated_at": "2026-10-26T01:45:27.796725"
   },
   "3104985": {
     "state": "unqualifying",
@@ -617,12 +617,12 @@
   "2912820": {
     "state": "qualifying",
     "live_str": "1.02/0.92/0.95",
-    "updated_at": "2026-10-26T01:30:31.267213"
+    "updated_at": "2026-10-26T01:45:27.796725"
   },
   "3035951": {
     "state": "qualifying",
     "live_str": "0.89/0.86/0.85",
-    "updated_at": "2026-10-26T01:30:31.267213"
+    "updated_at": "2026-10-26T01:45:27.796725"
   },
   "3105413": {
     "state": "unqualifying",
@@ -637,12 +637,12 @@
   "2913192": {
     "state": "qualifying",
     "live_str": "0.90/1.00/1.01",
-    "updated_at": "2026-10-26T01:30:31.267213"
+    "updated_at": "2026-10-26T01:45:27.796725"
   },
   "3034808": {
     "state": "qualifying",
     "live_str": "1.03/0.97/0.87",
-    "updated_at": "2026-10-26T01:30:31.267213"
+    "updated_at": "2026-10-26T01:45:27.796725"
   },
   "3023510": {
     "state": "unqualifying",
@@ -662,7 +662,7 @@
   "2998266": {
     "state": "qualifying",
     "live_str": "0.94/0.91/0.97",
-    "updated_at": "2026-10-26T01:30:31.267213"
+    "updated_at": "2026-10-26T01:45:27.796725"
   },
   "3014568": {
     "state": "unqualifying",
@@ -673,5 +673,10 @@
     "state": "unqualifying",
     "live_str": "0.86/0.91/0.96",
     "updated_at": "2026-10-26T01:30:31.267213"
+  },
+  "3105408": {
+    "state": "qualifying",
+    "live_str": "1.00/0.83/0.98",
+    "updated_at": "2026-10-26T01:45:27.796725"
   }
 }
