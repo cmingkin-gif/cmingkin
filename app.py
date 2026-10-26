@@ -133,8 +133,8 @@ def get_ai_analysis(league, home, away, init_k, live_k, hits_str, asian_info):
         print("⚠️ 找不到 GEMINI_API_KEY")
         return ""
     
-    # 先試用最標準、唔加任何後綴嘅名稱
-    model_name = "gemini-1.5-flash"
+    # 🎯 已經鎖定最適合 7x24 運作嘅 gemini-2.5-flash
+    model_name = "gemini-2.5-flash"
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
     
     prompt = f"""
