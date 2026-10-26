@@ -267,6 +267,7 @@ def fetch_asian_odds_with_selenium(qualified_results):
         
         for r in qualified_results:
             match_id = r['match_id']
+            match_dt = r['info']['match_dt']  # 獲取開波時間
             asian_str, asian_line_change = "--", ""
             
             try:
@@ -274,22 +275,60 @@ def fetch_asian_odds_with_selenium(qualified_results):
                 time.sleep(3) 
                 
                 soup_a = BeautifulSoup(driver.page_source, 'html.parser')
-                found = False
                 for tr in soup_a.find_all('tr'):
                     tds = [td.get_text(strip=True) for td in tr.find_all('td')]
                     if any(k in t for t in tds for k in PINNACLE_KEYWORDS):
+                        # 獲取平博公司 ID，用嚟查歷史終盤
+                        tr_id = tr.get('id', '')
+                        company_id = tr_id.replace('oddstr_', '') if 'oddstr_' in tr_id else ''
+                        
                         n_idx = next(i for i, v in enumerate(tds) if any(k in v for k in PINNACLE_KEYWORDS))
                         data_tds = [t for t in tds[n_idx+1:] if t not in ('', '+', '荐', '封', '走', '早')]
                         if len(data_tds) >= 6:
                             init_h, init_l, init_a = data_tds[0], data_tds[1], data_tds[2]
                             live_h, live_l, live_a = data_tds[3], data_tds[4], data_tds[5]
                             
+                            # === 🛡️ 終盤鎖定系統 (開賽後避免取得走地數據) ===
+                            current_time = datetime.now()
+                            if current_time >= match_dt and company_id:
+                                try:
+                                    hist_url = f"https://vip.titan007.com/changeDetail/asian.aspx?id={match_id}&companyid={company_id}"
+                                    hist_res = session.get(hist_url, timeout=5)
+                                    hist_soup = BeautifulSoup(hist_res.content.decode('gbk', errors='ignore'), 'html.parser')
+                                    
+                                    # 由新到舊逐行掃描歷史變動
+                                    for h_tr in hist_soup.find_all('tr'):
+                                        h_tds = [td.get_text(strip=True) for td in h_tr.find_all('td')]
+                                        # 確保係數據行，並嚴格排除包含「走」(走地) 嘅任何數據
+                                        if len(h_tds) >= 4 and "主水" not in h_tds[0]:
+                                            if any("走" in col for col in h_tds):
+                                                continue 
+                                                
+                                            time_match = re.search(r'(\d+)-(\d+)\s+(\d+):(\d+)', h_tds[3])
+                                            if time_match:
+                                                m_mon, m_day, m_hr, m_min = map(int, time_match.groups())
+                                                hist_dt = match_dt.replace(month=m_mon, day=m_day, hour=m_hr, minute=m_min)
+                                                
+                                                # 處理跨年問題
+                                                if m_mon == 12 and match_dt.month == 1:
+                                                    hist_dt = hist_dt.replace(year=match_dt.year - 1)
+                                                elif m_mon == 1 and match_dt.month == 12:
+                                                    hist_dt = hist_dt.replace(year=match_dt.year + 1)
+                                                    
+                                                # 只要時間早過或等於開波時間，即為最後賽前終盤！
+                                                if hist_dt <= match_dt:
+                                                    live_h, live_l, live_a = h_tds[0], h_tds[1], h_tds[2]
+                                                    print(f"✅ 成功攔截 {match_id} 賽前終盤: {live_l}")
+                                                    break
+                                except Exception as e:
+                                    print(f"⚠️ 獲取歷史終盤出錯: {e}")
+                            # ===============================================
+                            
                             init_l_num = parse_asian_handicap(init_l)
                             live_l_num = parse_asian_handicap(live_l)
                             
                             asian_str = f"初[{init_h}/{init_l_num}/{init_a}] ➔ 終[{live_h}/{live_l_num}/{live_a}]"
                             asian_line_change = f"(盤變: {init_l_num} ➔ {live_l_num})" if init_l_num != live_l_num else ""
-                            found = True
                             break
             except Exception:
                 pass
