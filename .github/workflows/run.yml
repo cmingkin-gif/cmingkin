@@ -11,7 +11,6 @@ jobs:
     
     permissions:
       contents: write
-      models: read          # 👈 開啟 GitHub 官方免費 AI 模型權限 (極重要)
 
     steps:
     - name: Checkout repository
@@ -31,8 +30,7 @@ jobs:
       env:
         TG_TOKEN: ${{ secrets.TG_TOKEN }}
         TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 👈 將 GitHub 內置鎖匙交畀 Python (極重要)
+        GITHUB_TOKEN: ${{ secrets.GH_PAT }}  # 👈 已經改為使用高權限嘅 GH_PAT
       run: python app.py
 
     - name: Commit and push state file
