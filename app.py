@@ -31,6 +31,9 @@ USE_TITAN_KELLY_MODE = True
 STATE_FILE = "recorded_state.json"
 recorded_matches = {}
 
+# === 🎯 新增：平博識別關鍵字 (加入 '平*' 破解未登入時的名字隱藏機制) ===
+PINNACLE_KEYWORDS = ('平博', 'Pinnacle', 'Pinna', '平*')
+
 GAME_ARRAY_RE = re.compile(r'game=Array\((.*?)\);', re.DOTALL)
 GAME_ITEM_RE = re.compile(r'"(.*?)"')
 TIME_EXTRACT_RE = re.compile(r'(\d{2}:\d{2})')
@@ -81,7 +84,7 @@ def save_state():
         with open(STATE_FILE, "w", encoding="utf-8") as f:
             json.dump(serializable, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        print(f"⚠️ 儲存狀態失敗: {e}")
+        pass
 
 def send_telegram_message(text):
     if not TELEGRAM_TOKEN or not CHAT_ID:
@@ -103,7 +106,7 @@ def cleanup_old_records(current_time):
     for m_id in expired_ids: del recorded_matches[m_id]
 
 def parse_asian_handicap(handicap_str):
-    """將球探網的中文字串盤口轉換為國際標準數值 (如 -0.25, +1, 0)"""
+    """將球探網的中文字串盤口轉換為國際標準數值"""
     h_str = str(handicap_str).replace(" ", "")
     if not h_str:
         return ""
@@ -118,7 +121,6 @@ def parse_asian_handicap(handicap_str):
         is_receive = False
         h_str = h_str.replace("让", "")
     else:
-        # 如果沒有標明，預設主隊為讓方 (-)
         is_receive = False
         
     sign = "+" if is_receive else "-"
@@ -173,7 +175,7 @@ def process_single_match(match_info):
     for g_item in games:
         f = g_item.split('|')
         if len(f) < 13: continue
-        if 'Pinna' in f[2]: pinna_row = f
+        if any(k in f[2] for k in PINNACLE_KEYWORDS): pinna_row = f
         try:
             ih, id_odds, ia = float(f[3]), float(f[4]), float(f[5])
             if ih > 0 and id_odds > 0 and ia > 0:
@@ -216,7 +218,7 @@ def process_single_match(match_info):
         if hits: is_qualifying = True
         
         # ==========================================
-        # ⚡ 抓取平博「亞讓」並數字化處理
+        # ⚡ 抓取平博「亞讓」並破解隱藏代號
         # ==========================================
         asian_str = "--"
         asian_line_change = ""
@@ -226,18 +228,17 @@ def process_single_match(match_info):
             try:
                 a_res = session.get(asian_url, timeout=(3.5, 4.5))
                 if a_res.status_code == 200:
-                    a_res.encoding = 'gb2312'
-                    a_html = a_res.text
+                    a_html_text = a_res.content.decode('gb18030', errors='ignore')
                     found_asian = False
                     
                     # 方案 1: JS 提取
-                    game_data_match_a = GAME_ARRAY_RE.search(a_html)
+                    game_data_match_a = GAME_ARRAY_RE.search(a_html_text)
                     if game_data_match_a:
                         games_a = GAME_ITEM_RE.findall(game_data_match_a.group(1))
                         for g_item in games_a:
                             f_a = g_item.split('|')
-                            if any('平博' in val or 'Pinnacle' in val or 'Pinna' in val for val in f_a):
-                                name_idx = next(i for i, v in enumerate(f_a) if '平博' in v or 'Pinnacle' in v or 'Pinna' in v)
+                            if any(k in val for val in f_a for k in PINNACLE_KEYWORDS):
+                                name_idx = next(i for i, v in enumerate(f_a) if any(k in v for k in PINNACLE_KEYWORDS))
                                 if len(f_a) >= name_idx + 7:
                                     init_h, init_l, init_a = f_a[name_idx+1], f_a[name_idx+2], f_a[name_idx+3]
                                     live_h, live_l, live_a = f_a[name_idx+4], f_a[name_idx+5], f_a[name_idx+6]
@@ -250,14 +251,15 @@ def process_single_match(match_info):
                                     found_asian = True
                                 break
                     
-                    # 方案 2: HTML 提取
+                    # 方案 2: HTML 提取 (自動對付被 '平*' 同 '+' 號干擾嘅情況)
                     if not found_asian:
-                        soup_a = BeautifulSoup(a_html, 'html.parser')
+                        soup_a = BeautifulSoup(a_res.content, 'html.parser')
                         for tr in soup_a.find_all('tr'):
                             tds = [td.get_text(strip=True) for td in tr.find_all('td')]
-                            if any('平博' in t or 'Pinnacle' in t or 'Pinna' in t for t in tds):
-                                n_idx = next(i for i, v in enumerate(tds) if '平博' in v or 'Pinnacle' in v or 'Pinna' in v)
-                                data_tds = [t for t in tds[n_idx+1:] if t.strip() not in ('', '+', '荐')]
+                            if any(k in t for t in tds for k in PINNACLE_KEYWORDS):
+                                n_idx = next(i for i, v in enumerate(tds) if any(k in v for k in PINNACLE_KEYWORDS))
+                                # 自動過濾無用嘅 '+' 號同空白格
+                                data_tds = [t for t in tds[n_idx+1:] if t.strip() not in ('', '+', '荐', '封')]
                                 if len(data_tds) >= 6:
                                     init_h, init_l, init_a = data_tds[0], data_tds[1], data_tds[2]
                                     live_h, live_l, live_a = data_tds[3], data_tds[4], data_tds[5]
