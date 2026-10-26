@@ -102,6 +102,7 @@ def cleanup_old_records(current_time):
     for m_id in expired_ids: del recorded_matches[m_id]
 
 def parse_asian_handicap(handicap_str):
+    """轉換亞洲盤口為數字"""
     h_str = str(handicap_str).replace(" ", "")
     if not h_str: return ""
     if h_str == "平手": return "0"
@@ -127,6 +128,7 @@ def parse_asian_handicap(handicap_str):
     return f"{sign}{val}" if val else handicap_str
 
 def process_single_match(match_info):
+    """第一階段：極速多線程獲取 1x2 歐賠並計算凱利 (只依靠 CDN 靜態資源，無懼攔截)"""
     match_id = match_info['match_id']
     odds_url = f"https://1x2d.titan007.com/{match_id}.js?t={int(time.time()*1000)}"
     try:
@@ -189,78 +191,20 @@ def process_single_match(match_info):
             
         if hits: is_qualifying = True
         
-        # ==========================================
-        # ⚡ 暴力 Regex 提取法 (無視 JS 包裹、破解隱藏代號)
-        # ==========================================
-        asian_str = "--"
-        asian_line_change = ""
-        
-        if is_qualifying:
-            asian_url = f"https://vip.titan007.com/AsianOdds_n.aspx?id={match_id}&l=0"
-            try:
-                a_res = session.get(asian_url, timeout=(3.5, 4.5))
-                if a_res.status_code == 200:
-                    a_html_text = a_res.content.decode('gb18030', errors='ignore')
-                    found_asian = False
-                    
-                    # 策略一：強行掃描所有 HTML <tr> (無論係咪被 JS 變數包裹)
-                    tr_matches = re.findall(r'<tr[^>]*>(.*?)<\/tr>', a_html_text, re.IGNORECASE | re.DOTALL)
-                    for tr_content in tr_matches:
-                        if any(k in tr_content for k in PINNACLE_KEYWORDS):
-                            td_matches = re.findall(r'<td[^>]*>(.*?)<\/td>', tr_content, re.IGNORECASE | re.DOTALL)
-                            tds = [re.sub(r'<[^>]+>', '', td).strip() for td in td_matches]
-                            
-                            n_idx = next((i for i, v in enumerate(tds) if any(k in v for k in PINNACLE_KEYWORDS)), -1)
-                            if n_idx != -1:
-                                # 過濾走所有擾亂數據嘅字元
-                                data_tds = [t for t in tds[n_idx+1:] if t not in ('', '+', '荐', '封', '走')]
-                                if len(data_tds) >= 6:
-                                    init_h, init_l, init_a = data_tds[0], data_tds[1], data_tds[2]
-                                    live_h, live_l, live_a = data_tds[3], data_tds[4], data_tds[5]
-                                    
-                                    init_l_num = parse_asian_handicap(init_l)
-                                    live_l_num = parse_asian_handicap(live_l)
-                                    
-                                    asian_str = f"初[{init_h}/{init_l_num}/{init_a}] ➔ 終[{live_h}/{live_l_num}/{live_a}]"
-                                    asian_line_change = f"(盤變: {init_l_num} ➔ {live_l_num})" if init_l_num != live_l_num else ""
-                                    found_asian = True
-                                    break
-                                    
-                    # 策略二：如果被轉成純文字陣列，用 ^ 或 | 強行分割掃描
-                    if not found_asian:
-                        rows = re.split(r'[\^\n;]', a_html_text)
-                        for row in rows:
-                            if any(k in row for k in PINNACLE_KEYWORDS):
-                                tokens = [re.sub(r'<[^>]+>', '', t).strip() for t in row.split('|')]
-                                n_idx = next((i for i, v in enumerate(tokens) if any(k in v for k in PINNACLE_KEYWORDS)), -1)
-                                if n_idx != -1 and len(tokens) >= n_idx + 6:
-                                    data_tds = [t for t in tokens[n_idx+1:] if t not in ('', '+', '荐', '封', '走') and len(t) > 0]
-                                    if len(data_tds) >= 6:
-                                        init_h, init_l, init_a = data_tds[0], data_tds[1], data_tds[2]
-                                        live_h, live_l, live_a = data_tds[3], data_tds[4], data_tds[5]
-                                        
-                                        init_l_num = parse_asian_handicap(init_l)
-                                        live_l_num = parse_asian_handicap(live_l)
-                                        
-                                        asian_str = f"初[{init_h}/{init_l_num}/{init_a}] ➔ 終[{live_h}/{live_l_num}/{live_a}]"
-                                        asian_line_change = f"(盤變: {init_l_num} ➔ {live_l_num})" if init_l_num != live_l_num else ""
-                                        break
-            except Exception:
-                pass
-
         return {
             'match_id': match_id,
             'initStr': f"{kInitH:.2f}/{kInitD:.2f}/{kInitA:.2f}",
             'liveStr': f"{kLiveH:.2f}/{kLiveD:.2f}/{kLiveA:.2f}",
             'hits_str': " ".join(hits) if hits else "--",
-            'asian_str': asian_str,
-            'asian_line_change': asian_line_change,
             'is_qualifying': is_qualifying,
             'info': match_info
         }
     except Exception: return None
 
-def fetch_main_page_html():
+def fetch_asian_odds_with_selenium(qualified_results):
+    """第二階段：只針對【真正達標】嘅賽事開啟真實瀏覽器抓取亞盤 (100% 破解防爬蟲牆)"""
+    if not qualified_results: return
+    
     options = Options()
     options.page_load_strategy = 'eager'
     options.add_argument("--headless=new")
@@ -270,9 +214,63 @@ def fetch_main_page_html():
     options.add_argument("--disable-features=VizDisplayCompositor")
     options.add_argument("--disable-software-rasterizer")
     options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument("--ignore-certificate-errors")
-    options.add_argument("--blink-settings=imagesEnabled=false")
     options.add_argument("--window-size=1920,1080")
+    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+    
+    driver = None
+    try:
+        print(f"⏳ 啟動專屬瀏覽器抓取 {len(qualified_results)} 場達標賽事嘅亞盤...", flush=True)
+        driver = webdriver.Chrome(options=options)
+        driver.set_page_load_timeout(20)
+        
+        for r in qualified_results:
+            match_id = r['match_id']
+            asian_str, asian_line_change = "--", ""
+            
+            try:
+                driver.get(f"https://vip.titan007.com/AsianOdds_n.aspx?id={match_id}&l=0")
+                # 🛑 關鍵：強制等待 3 秒，等球探網防爬蟲 JS 驗證完成並完全生成表格
+                time.sleep(3) 
+                
+                soup_a = BeautifulSoup(driver.page_source, 'html.parser')
+                found = False
+                for tr in soup_a.find_all('tr'):
+                    tds = [td.get_text(strip=True) for td in tr.find_all('td')]
+                    # 只要見到包含平博/平*嘅行就攔截
+                    if any(k in t for t in tds for k in PINNACLE_KEYWORDS):
+                        n_idx = next(i for i, v in enumerate(tds) if any(k in v for k in PINNACLE_KEYWORDS))
+                        # 智能過濾 +號、早盤、走地等干擾字元
+                        data_tds = [t for t in tds[n_idx+1:] if t not in ('', '+', '荐', '封', '走', '早')]
+                        if len(data_tds) >= 6:
+                            init_h, init_l, init_a = data_tds[0], data_tds[1], data_tds[2]
+                            live_h, live_l, live_a = data_tds[3], data_tds[4], data_tds[5]
+                            
+                            init_l_num = parse_asian_handicap(init_l)
+                            live_l_num = parse_asian_handicap(live_l)
+                            
+                            asian_str = f"初[{init_h}/{init_l_num}/{init_a}] ➔ 終[{live_h}/{live_l_num}/{live_a}]"
+                            asian_line_change = f"(盤變: {init_l_num} ➔ {live_l_num})" if init_l_num != live_l_num else ""
+                            found = True
+                            break
+            except Exception as e:
+                print(f"❌ 抓取亞盤時出錯 {match_id}: {e}", flush=True)
+            
+            r['asian_str'] = asian_str
+            r['asian_line_change'] = asian_line_change
+            
+    finally:
+        if driver:
+            try: driver.quit()
+            except: pass
+
+def fetch_main_page_html():
+    options = Options()
+    options.page_load_strategy = 'eager'
+    options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
     
     for attempt in range(1, 4):
@@ -289,7 +287,7 @@ def fetch_main_page_html():
         finally:
             if driver:
                 try: driver.quit()
-                except Exception: pass
+                except: pass
         time.sleep(2)
     return ""
 
@@ -332,22 +330,30 @@ def run_scraper_once():
                 
             match_infos.append({'match_id': match_id, 'league': tds[1].text.strip() if len(tds)>1 else "", 'time': formatted_time, 'match_dt': match_dt, 'home': home, 'away': away})
             
+        # 第一階段：多線程快速篩選凱利
         results = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=45) as executor:
             future_to_match = {executor.submit(process_single_match, info): info for info in match_infos}
             for future in concurrent.futures.as_completed(future_to_match, timeout=45):
                 res = future.result()
                 if res: results.append(res)
+        
+        # 第二階段：對達標賽事進行 Selenium 亞盤破解
+        qualified_results = [r for r in results if r['is_qualifying']]
+        fetch_asian_odds_with_selenium(qualified_results)
                     
         valid_alerts = []
         for r in results:
             m_id, is_qualifying, live_str = r['match_id'], r['is_qualifying'], r['liveStr']
             if is_qualifying:
+                asian_str = r.get('asian_str', '--')
+                asian_line_change = r.get('asian_line_change', '')
+                
                 msg = f"🏆 {r['info']['league']} | ⏱ {r['info']['time']}\n"
                 msg += f"⚽ {r['info']['home']} vs {r['info']['away']}\n"
                 msg += f"📊 凱利: 初[{r['initStr']}] ➔ 即[{live_str}]\n"
                 msg += f"🔻 最低項跌: {r['hits_str']}\n"
-                msg += f"📐 亞讓: {r['asian_str']} {r['asian_line_change']}".strip() if r['asian_str'] != "--" else "📐 亞讓: 暫無平博數據"
+                msg += f"📐 亞讓: {asian_str} {asian_line_change}".strip() if asian_str != "--" else "📐 亞讓: 暫無平博數據"
 
                 valid_alerts.append({'match_dt': r['info']['match_dt'], 'msg': msg})
                 
@@ -365,8 +371,8 @@ def run_scraper_once():
             valid_alerts.sort(key=lambda x: (x['match_dt'] < current_scan_time, x['match_dt']))
             send_telegram_message("🚨 Pinna 最新凱利達標：\n\n" + "\n\n".join([x['msg'] for x in valid_alerts]))
 
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Error: {e}")
 
 if __name__ == "__main__":
     load_state()
