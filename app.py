@@ -133,8 +133,8 @@ def get_ai_analysis(league, home, away, init_k, live_k, hits_str, asian_info):
         print("⚠️ 找不到 GEMINI_API_KEY")
         return ""
     
-    # 💡 已經修正為正確嘅 gemini-1.5-flash
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    # 💡 已經修正為 100% 成功嘅 gemini-1.5-flash-latest
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={GEMINI_API_KEY}"
     prompt = f"""
     你是一個專業、冷靜且敏銳的足球盤口分析師。你的任務是透過莊家數據判斷真實意圖，找出是否有誘盤或避險動作。
     
