@@ -22,11 +22,11 @@ os.environ["TZ"] = "Asia/Hong_Kong"
 if hasattr(time, "tzset"):
     time.tzset()
 
-# === 你的專屬 Telegram 資訊 (從 GitHub Secrets 讀取) ===
+# === Telegram 認證資訊 (由 GitHub Secrets 安全注入) ===
 TELEGRAM_TOKEN = os.environ.get("TG_TOKEN")
 CHAT_ID = os.environ.get("TG_CHAT_ID")
 
-# ⚡ 鎖定為 True：初盤與即場凱利均採用「即場市場平均勝率」計算，100% 吻合球探網畫面
+# ⚡ 鎖定為 True：初盤與即場凱利均採用「即場市場平均勝率」計算
 USE_TITAN_KELLY_MODE = True
 STATE_FILE = "recorded_state.json"
 recorded_matches = {}
@@ -65,7 +65,6 @@ def load_state():
                 "live_str": data["live_str"],
                 "updated_at": datetime.fromisoformat(data["updated_at"])
             }
-        print(f"📂 已載入 {len(recorded_matches)} 場歷史狀態 (防重複通知)。", flush=True)
     except Exception:
         pass
 
@@ -85,13 +84,17 @@ def save_state():
         print(f"⚠️ 儲存狀態失敗: {e}")
 
 def send_telegram_message(text):
+    if not TELEGRAM_TOKEN or not CHAT_ID:
+        return
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     chunks = [text[i:i+3800] for i in range(0, len(text), 3800)]
     for chunk in chunks:
         payload = {"chat_id": CHAT_ID, "text": chunk}
         for _ in range(2):
             try:
-                if session.post(url, json=payload, timeout=10).status_code == 200: break
+                res = session.post(url, json=payload, timeout=10)
+                if res.status_code == 200:
+                    break
             except Exception:
                 time.sleep(1)
 
@@ -163,18 +166,65 @@ def process_single_match(match_info):
             
         if hits: is_qualifying = True
         
+        # ==========================================
+        # ⚡ 僅在「凱利達標」時，才觸發抓取平博亞盤 (極速省流)
+        # ==========================================
+        asian_str = "--"
+        asian_line_change = ""
+        
+        if is_qualifying:
+            asian_url = f"https://vip.titan007.com/AsianOdds_n.aspx?id={match_id}"
+            try:
+                a_res = session.get(asian_url, timeout=(3.5, 4.5))
+                if a_res.status_code == 200:
+                    a_res.encoding = 'gb2312'
+                    a_html = a_res.text
+                    found_asian = False
+                    
+                    game_data_match_a = GAME_ARRAY_RE.search(a_html)
+                    if game_data_match_a:
+                        games_a = GAME_ITEM_RE.findall(game_data_match_a.group(1))
+                        for g_item in games_a:
+                            f_a = g_item.split('|')
+                            if any('平博' in val or 'Pinnacle' in val or 'Pinna' in val for val in f_a):
+                                name_idx = next(i for i, v in enumerate(f_a) if '平博' in v or 'Pinnacle' in v or 'Pinna' in v)
+                                if len(f_a) >= name_idx + 7:
+                                    init_h, init_l, init_a = f_a[name_idx+1], f_a[name_idx+2], f_a[name_idx+3]
+                                    live_h, live_l, live_a = f_a[name_idx+4], f_a[name_idx+5], f_a[name_idx+6]
+                                    asian_str = f"初[{init_h} / {init_l} / {init_a}] ➔ 即[{live_h} / {live_l} / {live_a}]"
+                                    asian_line_change = f"(盤變: {init_l}➔{live_l})" if init_l != live_l else ""
+                                    found_asian = True
+                                break
+                    
+                    if not found_asian:
+                        soup_a = BeautifulSoup(a_html, 'html.parser')
+                        for tr in soup_a.find_all('tr'):
+                            tds = [td.get_text(strip=True) for td in tr.find_all('td')]
+                            if any('平博' in t or 'Pinnacle' in t or 'Pinna' in t for t in tds):
+                                n_idx = next(i for i, v in enumerate(tds) if '平博' in v or 'Pinnacle' in v or 'Pinna' in v)
+                                if len(tds) >= n_idx + 7:
+                                    init_h, init_l, init_a = tds[n_idx+1], tds[n_idx+2], tds[n_idx+3]
+                                    live_h, live_l, live_a = tds[n_idx+4], tds[n_idx+5], tds[n_idx+6]
+                                    asian_str = f"初[{init_h} / {init_l} / {init_a}] ➔ 即[{live_h} / {live_l} / {live_a}]"
+                                    asian_line_change = f"(盤變: {init_l}➔{live_l})" if init_l != live_l else ""
+                                break
+            except Exception:
+                pass
+        # ==========================================
+
         return {
             'match_id': match_id,
             'initStr': f"{kInitH:.2f}/{kInitD:.2f}/{kInitA:.2f}",
             'liveStr': f"{kLiveH:.2f}/{kLiveD:.2f}/{kLiveA:.2f}",
             'hits_str': " ".join(hits) if hits else "--",
+            'asian_str': asian_str,
+            'asian_line_change': asian_line_change,
             'is_qualifying': is_qualifying,
             'info': match_info
         }
     except Exception: return None
 
 def fetch_main_page_html():
-    """專為 GitHub Actions 設計：最多自動重試 3 次，對抗跨國網絡偶發塞車"""
     options = Options()
     options.page_load_strategy = 'eager'
     options.add_argument("--headless=new")
@@ -192,14 +242,13 @@ def fetch_main_page_html():
     for attempt in range(1, 4):
         driver = None
         try:
-            print(f"🌐 [第 {attempt}/3 次嘗試] 正在連線至球探網...", flush=True)
             driver = webdriver.Chrome(options=options)
             driver.set_page_load_timeout(20)
             
             try:
                 driver.get("https://live.titan007.com/indexall_big.aspx")
             except Exception:
-                print("⚠️ 頁面載入觸發超時保護，直接檢查表格是否已生成...", flush=True)
+                pass
 
             try:
                 WebDriverWait(driver, 10).until(
@@ -210,12 +259,9 @@ def fetch_main_page_html():
 
             html = driver.page_source
             if html and "tr1_" in html:
-                print(f"✅ 第 {attempt} 次嘗試成功抓取賽事列表！", flush=True)
                 return html
-            else:
-                print(f"⚠️ 第 {attempt} 次嘗試未見賽事表格，準備重試...", flush=True)
-        except Exception as e:
-            print(f"❌ 第 {attempt} 次瀏覽器異常: {e}", flush=True)
+        except Exception:
+            pass
         finally:
             if driver:
                 try:
@@ -223,20 +269,15 @@ def fetch_main_page_html():
                 except Exception:
                     pass
         time.sleep(2)
-        
     return ""
 
 def run_scraper_once():
-    """單次執行邏輯，跑完即退出，交由外部排程控制"""
     start_ts = time.time()
     current_scan_time = datetime.now()
     cleanup_old_records(current_scan_time)
 
-    print(f"\n🚀 [GitHub Actions 單次專用版] 啟動掃描... (執行時間: {current_scan_time.strftime('%Y-%m-%d %H:%M:%S')})", flush=True)
-    
     page_html = fetch_main_page_html()
     if not page_html:
-        print("❌ 連續 3 次嘗試均無法獲取賽事列表，結束本次執行。", flush=True)
         return
 
     try:
@@ -271,8 +312,6 @@ def run_scraper_once():
                 
             match_infos.append({'match_id': match_id, 'league': tds[1].text.strip() if len(tds)>1 else "", 'time': formatted_time, 'match_dt': match_dt, 'home': home, 'away': away})
             
-        print(f"🗑️ 過濾後剩餘 {len(match_infos)} 場進行 45 併發掃描...", flush=True)
-        
         results = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=45) as executor:
             future_to_match = {executor.submit(process_single_match, info): info for info in match_infos}
@@ -284,7 +323,17 @@ def run_scraper_once():
         for r in results:
             m_id, is_qualifying, live_str = r['match_id'], r['is_qualifying'], r['liveStr']
             if is_qualifying:
-                valid_alerts.append({'match_dt': r['info']['match_dt'], 'msg': f"🏆 {r['info']['league']} | ⏱ {r['info']['time']}\n⚽ {r['info']['home']} vs {r['info']['away']}\n📊 初[{r['initStr']}] ➔ 即[{live_str}]\n🔻 最低項跌: {r['hits_str']}"})
+                # 修正：字眼改為「凱利」與「最低項跌」
+                msg = f"🏆 {r['info']['league']} | ⏱ {r['info']['time']}\n"
+                msg += f"⚽ {r['info']['home']} vs {r['info']['away']}\n"
+                msg += f"📊 凱利: 初[{r['initStr']}] ➔ 即[{live_str}]\n"
+                msg += f"🔻 最低項跌: {r['hits_str']}\n"
+                if r['asian_str'] != "--":
+                    msg += f"📐 亞盤: {r['asian_str']} {r['asian_line_change']}".strip()
+                else:
+                    msg += "📐 亞盤: 暫無平博數據"
+
+                valid_alerts.append({'match_dt': r['info']['match_dt'], 'msg': msg})
                 
                 prev = recorded_matches.get(m_id, {})
                 if not prev or prev.get('state') == 'unqualifying' or prev.get('live_str') != live_str:
@@ -295,17 +344,13 @@ def run_scraper_once():
                     recorded_matches[m_id] = {'state': 'unqualifying', 'live_str': live_str, 'updated_at': current_scan_time}
 
         save_state()
-        elapsed = round(time.time() - start_ts, 1)
         
         if valid_alerts:
             valid_alerts.sort(key=lambda x: (x['match_dt'] < current_scan_time, x['match_dt']))
             send_telegram_message("🚨 Pinna 最新凱利達標：\n\n" + "\n\n".join([x['msg'] for x in valid_alerts]))
-            print(f"✅ 成功發送 {len(valid_alerts)} 場通知！(總耗時: {elapsed} 秒)", flush=True)
-        else:
-            print(f"🎯 掃描完成！目前無達標賽事。(總耗時: {elapsed} 秒)", flush=True)
 
-    except Exception as e:
-        print(f"❌ 嚴重執行出錯: {e}", flush=True)
+    except Exception:
+        pass
 
 if __name__ == "__main__":
     load_state()
