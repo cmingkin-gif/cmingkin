@@ -25,7 +25,8 @@ if hasattr(time, "tzset"):
 # === 認證資訊 ===
 TELEGRAM_TOKEN = os.environ.get("TG_TOKEN")
 CHAT_ID = os.environ.get("TG_CHAT_ID")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")  # 🤖 AI 分析師鎖匙
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")  # 免費 GitHub Models 內置權限
 
 USE_TITAN_KELLY_MODE = True
 STATE_FILE = "recorded_state.json"
@@ -34,15 +35,12 @@ recorded_matches = {}
 # 🎯 平博識別關鍵字
 PINNACLE_KEYWORDS = ('平博', 'Pinnacle', 'Pinna', '平*')
 
-# 🤖 候選免費聰明模型清單 (會自動按順序測試並鎖定可用嘅免費模型)
+# 🤖 Google 官方最新提示之模型清單
 CANDIDATE_MODELS = [
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-    "gemini-flash-lite-latest",
-    "gemma-4-31b-it",
-    "gemma-4-26b-a4b-it"
+    "gemini-3.8-flash",
+    "gemini-3.5-flash-lite"
 ]
-WORKING_MODEL = None
+WORKING_PROVIDER = None  # 記錄成功跑通嘅免費通道
 
 GAME_ARRAY_RE = re.compile(r'game=Array\((.*?)\);', re.DOTALL)
 GAME_ITEM_RE = re.compile(r'"(.*?)"')
@@ -137,59 +135,99 @@ def parse_asian_handicap(handicap_str):
     val = mapping.get(h_str)
     return f"{sign}{val}" if val else handicap_str
 
-# 🤖 AI 盤口分析引擎 (自動尋找免費可用模型版)
+# 🤖 AI 盤口分析引擎 (三保險 100% 免費版：Gemini 3.8 ➔ GitHub GPT-4o-mini ➔ 免Key免費AI)
 def get_ai_analysis(league, home, away, init_k, live_k, hits_str, asian_info):
-    global WORKING_MODEL
-    if not GEMINI_API_KEY: 
-        print("⚠️ 找不到 GEMINI_API_KEY")
-        return ""
+    global WORKING_PROVIDER
     
-    prompt = f"""
-    你是一個專業、冷靜且敏銳的足球盤口分析師。你的任務是透過莊家數據判斷真實意圖，找出是否有誘盤或避險動作。
-    
-    【賽事資訊】
-    賽事: {league} | 主隊: {home} vs 客隊: {away}
-    
-    【盤口變化數據】
-    歐賠凱利指數: 初盤[{init_k}] ➔ 即場[{live_k}]
-    最低項資金流向: {hits_str}
-    平博亞讓盤口: {asian_info} (註: 正數代表主隊讓球，負數代表主隊受讓)
-    
-    【分析任務】
-    請簡潔俐落地進行分析。字數嚴格限制在 80 字以內，不要廢話，直接給出結論。格式必須如下：
-    🎯 綜合勝出預測：[主勝 / 客勝 / 和局]，信心度：[⭐ 到 ⭐⭐⭐⭐⭐]
-    📝 莊家意圖：[一句話總結歐亞走勢是否一致，莊家是在真實避險還是故意誘盤]
-    """
-    
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 150}
-    }
-    
-    models_to_try = [WORKING_MODEL] if WORKING_MODEL else CANDIDATE_MODELS
-    
-    for model_name in models_to_try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
-        try:
-            res = requests.post(url, json=payload, timeout=10)
-            if res.status_code == 200:
-                data = res.json()
-                analysis_text = data['candidates'][0]['content']['parts'][0]['text'].strip()
-                if not WORKING_MODEL:
-                    WORKING_MODEL = model_name
-                    print(f"✅ 成功鎖定免費可用模型: {model_name}")
-                return f"\n💡 【AI 盤口分析】\n{analysis_text}"
-            elif res.status_code == 402:
-                print(f"⚠️ 模型 '{model_name}' 返回 402 (需要預付費額度)，正在自動嘗試下一個免費模型...")
-                continue
-            else:
-                print(f"⚠️ 模型 '{model_name}' API 錯誤 ({res.status_code}): {res.text}")
-                continue
-        except Exception as e:
-            print(f"⚠️ 模型 '{model_name}' 請求出錯: {e}")
-            continue
+    prompt = f"""你是一個專業、冷靜且敏銳的足球盤口分析師。你的任務是透過莊家數據判斷真實意圖，找出是否有誘盤或避險動作。
 
-    print("❌ 所有候選模型均無法使用。如果全部返回 402，代表你的 Google 專案被設為預付費 (Prepay) 且餘額為 0。")
+【賽事資訊】
+賽事: {league} | 主隊: {home} vs 客隊: {away}
+
+【盤口變化數據】
+歐賠凱利指數: 初盤[{init_k}] ➔ 即場[{live_k}]
+最低項資金流向: {hits_str}
+平博亞讓盤口: {asian_info} (註: 正數代表主隊讓球，負數代表主隊受讓)
+
+【分析任務】
+請簡潔俐落地進行分析。字數嚴格限制在 80 字以內，不要廢話，直接給出結論。格式必須嚴格如下：
+🎯 綜合勝出預測：[主勝 / 客勝 / 和局]，信心度：[⭐ 到 ⭐⭐⭐⭐⭐]
+📝 莊家意圖：[一句話總結歐亞走勢是否一致，莊家是在真實避險還是故意誘盤]"""
+
+    # 1️⃣ 通道一：嘗試 Google Gemini 3.8 / 3.5 (如果尚未被判定為 402 鎖區)
+    if GEMINI_API_KEY and WORKING_PROVIDER not in ("github", "free_fallback"):
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 180}
+        }
+        models_to_try = [WORKING_PROVIDER] if (WORKING_PROVIDER and WORKING_PROVIDER.startswith("gemini")) else CANDIDATE_MODELS
+        for model_name in models_to_try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
+            try:
+                res = requests.post(url, json=payload, timeout=10)
+                if res.status_code == 200:
+                    data = res.json()
+                    analysis_text = data['candidates'][0]['content']['parts'][0]['text'].strip()
+                    WORKING_PROVIDER = model_name
+                    print(f"✅ 成功使用 Google 免費模型: {model_name}")
+                    return f"\n💡 【AI 盤口分析】\n{analysis_text}"
+                else:
+                    print(f"⚠️ Google 模型 '{model_name}' 無法使用 (狀態碼 {res.status_code})，準備切換免費後備 AI...")
+            except Exception as e:
+                print(f"⚠️ Google 模型請求異常: {e}")
+
+    # 2️⃣ 通道二：GitHub 官方內置免費 AI (GPT-4o-mini)
+    if GITHUB_TOKEN and WORKING_PROVIDER != "free_fallback":
+        try:
+            gh_url = "https://models.github.ai/inference/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {GITHUB_TOKEN}",
+                "Content-Type": "application/json"
+            }
+            gh_payload = {
+                "model": "openai/gpt-4o-mini",
+                "messages": [
+                    {"role": "system", "content": "你是一個專業的足球盤口與凱利指數分析師，只使用繁體中文回答。"},
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.3,
+                "max_tokens": 180
+            }
+            res = requests.post(gh_url, headers=headers, json=gh_payload, timeout=12)
+            if res.status_code == 200:
+                analysis_text = res.json()['choices'][0]['message']['content'].strip()
+                if WORKING_PROVIDER != "github":
+                    WORKING_PROVIDER = "github"
+                    print("✅ 成功切換至 GitHub 內置免費模型: GPT-4o-mini")
+                return f"\n💡 【AI 盤口分析】\n{analysis_text}"
+            else:
+                print(f"⚠️ GitHub Models 狀態碼 ({res.status_code})，切換至免 Key 免費通道...")
+        except Exception as e:
+            print(f"⚠️ GitHub Models 請求異常: {e}")
+
+    # 3️⃣ 通道三：免 API Key 7x24 免費 AI 通道 (零設定保底)
+    try:
+        free_url = "https://text.pollinations.ai/openai"
+        free_payload = {
+            "model": "openai",
+            "messages": [
+                {"role": "system", "content": "你是一個專業的足球盤口與凱利指數分析師，只使用繁體中文回答。"},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.3
+        }
+        res = requests.post(free_url, json=free_payload, timeout=15)
+        if res.status_code == 200:
+            analysis_text = res.json()['choices'][0]['message']['content'].strip()
+            if WORKING_PROVIDER != "free_fallback":
+                WORKING_PROVIDER = "free_fallback"
+                print("✅ 成功啟用 7x24 免 Key 免費 AI 分析通道！")
+            return f"\n💡 【AI 盤口分析】\n{analysis_text}"
+        else:
+            print(f"⚠️ 免 Key 通道返回狀態碼: {res.status_code}")
+    except Exception as e:
+        print(f"⚠️ 免 Key 通道請求出錯: {e}")
+
     return ""
 
 def process_single_match(match_info):
@@ -422,7 +460,7 @@ def run_scraper_once():
                 )
                 if ai_reply:
                     msg += f"\n{ai_reply}"
-                    time.sleep(1) # 稍作停頓防 Rate Limit
+                    time.sleep(1)
 
                 valid_alerts.append({'match_dt': r['info']['match_dt'], 'msg': msg})
                 
