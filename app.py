@@ -22,22 +22,20 @@ os.environ["TZ"] = "Asia/Hong_Kong"
 if hasattr(time, "tzset"):
     time.tzset()
 
-# === Telegram 認證資訊 (由 GitHub Secrets 安全注入) ===
+# === Telegram 認證資訊 ===
 TELEGRAM_TOKEN = os.environ.get("TG_TOKEN")
 CHAT_ID = os.environ.get("TG_CHAT_ID")
 
-# ⚡ 鎖定為 True：初盤與即場凱利均採用「即場市場平均勝率」計算
 USE_TITAN_KELLY_MODE = True
 STATE_FILE = "recorded_state.json"
 recorded_matches = {}
 
-# === 🎯 新增：平博識別關鍵字 (加入 '平*' 破解未登入時的名字隱藏機制) ===
+# 🎯 平博識別關鍵字
 PINNACLE_KEYWORDS = ('平博', 'Pinnacle', 'Pinna', '平*')
 
 GAME_ARRAY_RE = re.compile(r'game=Array\((.*?)\);', re.DOTALL)
 GAME_ITEM_RE = re.compile(r'"(.*?)"')
 TIME_EXTRACT_RE = re.compile(r'(\d{2}:\d{2})')
-SCORE_RE = re.compile(r'\d+\s*-\s*\d+')
 TR_ID_RE = re.compile(r'^tr1_')
 FINISHED_KEYWORDS = ("完", "推", "消", "斬", "斩", "斷", "断", "待", "異", "异", "FT", "End")
 
@@ -83,7 +81,7 @@ def save_state():
         }
         with open(STATE_FILE, "w", encoding="utf-8") as f:
             json.dump(serializable, f, ensure_ascii=False, indent=2)
-    except Exception as e:
+    except Exception:
         pass
 
 def send_telegram_message(text):
@@ -95,9 +93,7 @@ def send_telegram_message(text):
         payload = {"chat_id": CHAT_ID, "text": chunk}
         for _ in range(2):
             try:
-                res = session.post(url, json=payload, timeout=10)
-                if res.status_code == 200:
-                    break
+                if session.post(url, json=payload, timeout=10).status_code == 200: break
             except Exception:
                 time.sleep(1)
 
@@ -106,12 +102,9 @@ def cleanup_old_records(current_time):
     for m_id in expired_ids: del recorded_matches[m_id]
 
 def parse_asian_handicap(handicap_str):
-    """將球探網的中文字串盤口轉換為國際標準數值"""
     h_str = str(handicap_str).replace(" ", "")
-    if not h_str:
-        return ""
-    if h_str == "平手":
-        return "0"
+    if not h_str: return ""
+    if h_str == "平手": return "0"
 
     is_receive = False
     if "受让" in h_str:
@@ -120,38 +113,18 @@ def parse_asian_handicap(handicap_str):
     elif "让" in h_str:
         is_receive = False
         h_str = h_str.replace("让", "")
-    else:
-        is_receive = False
         
     sign = "+" if is_receive else "-"
 
     mapping = {
-        "平手/半球": "0.25", "平/半": "0.25",
-        "半球": "0.5",
-        "半球/一球": "0.75", "半/一": "0.75",
-        "一球": "1",
-        "一球/球半": "1.25", "一/球半": "1.25",
-        "球半": "1.5",
-        "球半/两球": "1.75", "球半/两": "1.75",
-        "两球": "2",
-        "两球/两球半": "2.25", "两/两半": "2.25",
-        "两球半": "2.5",
-        "两球半/三球": "2.75", "两半/三": "2.75",
-        "三球": "3",
-        "三球/三球半": "3.25", "三/三半": "3.25",
-        "三球半": "3.5",
-        "三球半/四球": "3.75", "三半/四": "3.75",
-        "四球": "4",
-        "四球/四球半": "4.25", "四/四半": "4.25",
-        "四球半": "4.5",
-        "四球半/五球": "4.75", "四半/五": "4.75",
-        "五球": "5"
+        "平手/半球": "0.25", "平/半": "0.25", "半球": "0.5", "半球/一球": "0.75", "半/一": "0.75",
+        "一球": "1", "一球/球半": "1.25", "一/球半": "1.25", "球半": "1.5", "球半/两球": "1.75", "球半/两": "1.75",
+        "两球": "2", "两球/两球半": "2.25", "两/两半": "2.25", "两球半": "2.5", "两球半/三球": "2.75", "两半/三": "2.75",
+        "三球": "3", "三球/三球半": "3.25", "三/三半": "3.25", "三球半": "3.5", "三球半/四球": "3.75", "三半/四": "3.75",
+        "四球": "4", "四球/四球半": "4.25", "四/四半": "4.25", "四球半": "4.5", "四球半/五球": "4.75", "四半/五": "4.75", "五球": "5"
     }
-
     val = mapping.get(h_str)
-    if val:
-        return f"{sign}{val}"
-    return handicap_str
+    return f"{sign}{val}" if val else handicap_str
 
 def process_single_match(match_info):
     match_id = match_info['match_id']
@@ -166,7 +139,6 @@ def process_single_match(match_info):
     game_data_match = GAME_ARRAY_RE.search(js_text)
     if not game_data_match: return None
     games = GAME_ITEM_RE.findall(game_data_match.group(1))
-    if not games: return None
     
     pinna_row = None
     sumInitProbH, sumInitProbD, sumInitProbA, init_count = 0.0, 0.0, 0.0, 0
@@ -218,48 +190,30 @@ def process_single_match(match_info):
         if hits: is_qualifying = True
         
         # ==========================================
-        # ⚡ 抓取平博「亞讓」並破解隱藏代號
+        # ⚡ 暴力 Regex 提取法 (無視 JS 包裹、破解隱藏代號)
         # ==========================================
         asian_str = "--"
         asian_line_change = ""
         
         if is_qualifying:
-            asian_url = f"https://vip.titan007.com/AsianOdds_n.aspx?id={match_id}"
+            asian_url = f"https://vip.titan007.com/AsianOdds_n.aspx?id={match_id}&l=0"
             try:
                 a_res = session.get(asian_url, timeout=(3.5, 4.5))
                 if a_res.status_code == 200:
                     a_html_text = a_res.content.decode('gb18030', errors='ignore')
                     found_asian = False
                     
-                    # 方案 1: JS 提取
-                    game_data_match_a = GAME_ARRAY_RE.search(a_html_text)
-                    if game_data_match_a:
-                        games_a = GAME_ITEM_RE.findall(game_data_match_a.group(1))
-                        for g_item in games_a:
-                            f_a = g_item.split('|')
-                            if any(k in val for val in f_a for k in PINNACLE_KEYWORDS):
-                                name_idx = next(i for i, v in enumerate(f_a) if any(k in v for k in PINNACLE_KEYWORDS))
-                                if len(f_a) >= name_idx + 7:
-                                    init_h, init_l, init_a = f_a[name_idx+1], f_a[name_idx+2], f_a[name_idx+3]
-                                    live_h, live_l, live_a = f_a[name_idx+4], f_a[name_idx+5], f_a[name_idx+6]
-                                    
-                                    init_l_num = parse_asian_handicap(init_l)
-                                    live_l_num = parse_asian_handicap(live_l)
-                                    
-                                    asian_str = f"初[{init_h}/{init_l_num}/{init_a}] ➔ 終[{live_h}/{live_l_num}/{live_a}]"
-                                    asian_line_change = f"(盤變: {init_l_num} ➔ {live_l_num})" if init_l_num != live_l_num else ""
-                                    found_asian = True
-                                break
-                    
-                    # 方案 2: HTML 提取 (自動對付被 '平*' 同 '+' 號干擾嘅情況)
-                    if not found_asian:
-                        soup_a = BeautifulSoup(a_res.content, 'html.parser')
-                        for tr in soup_a.find_all('tr'):
-                            tds = [td.get_text(strip=True) for td in tr.find_all('td')]
-                            if any(k in t for t in tds for k in PINNACLE_KEYWORDS):
-                                n_idx = next(i for i, v in enumerate(tds) if any(k in v for k in PINNACLE_KEYWORDS))
-                                # 自動過濾無用嘅 '+' 號同空白格
-                                data_tds = [t for t in tds[n_idx+1:] if t.strip() not in ('', '+', '荐', '封')]
+                    # 策略一：強行掃描所有 HTML <tr> (無論係咪被 JS 變數包裹)
+                    tr_matches = re.findall(r'<tr[^>]*>(.*?)<\/tr>', a_html_text, re.IGNORECASE | re.DOTALL)
+                    for tr_content in tr_matches:
+                        if any(k in tr_content for k in PINNACLE_KEYWORDS):
+                            td_matches = re.findall(r'<td[^>]*>(.*?)<\/td>', tr_content, re.IGNORECASE | re.DOTALL)
+                            tds = [re.sub(r'<[^>]+>', '', td).strip() for td in td_matches]
+                            
+                            n_idx = next((i for i, v in enumerate(tds) if any(k in v for k in PINNACLE_KEYWORDS)), -1)
+                            if n_idx != -1:
+                                # 過濾走所有擾亂數據嘅字元
+                                data_tds = [t for t in tds[n_idx+1:] if t not in ('', '+', '荐', '封', '走')]
                                 if len(data_tds) >= 6:
                                     init_h, init_l, init_a = data_tds[0], data_tds[1], data_tds[2]
                                     live_h, live_l, live_a = data_tds[3], data_tds[4], data_tds[5]
@@ -269,10 +223,30 @@ def process_single_match(match_info):
                                     
                                     asian_str = f"初[{init_h}/{init_l_num}/{init_a}] ➔ 終[{live_h}/{live_l_num}/{live_a}]"
                                     asian_line_change = f"(盤變: {init_l_num} ➔ {live_l_num})" if init_l_num != live_l_num else ""
-                                break
+                                    found_asian = True
+                                    break
+                                    
+                    # 策略二：如果被轉成純文字陣列，用 ^ 或 | 強行分割掃描
+                    if not found_asian:
+                        rows = re.split(r'[\^\n;]', a_html_text)
+                        for row in rows:
+                            if any(k in row for k in PINNACLE_KEYWORDS):
+                                tokens = [re.sub(r'<[^>]+>', '', t).strip() for t in row.split('|')]
+                                n_idx = next((i for i, v in enumerate(tokens) if any(k in v for k in PINNACLE_KEYWORDS)), -1)
+                                if n_idx != -1 and len(tokens) >= n_idx + 6:
+                                    data_tds = [t for t in tokens[n_idx+1:] if t not in ('', '+', '荐', '封', '走') and len(t) > 0]
+                                    if len(data_tds) >= 6:
+                                        init_h, init_l, init_a = data_tds[0], data_tds[1], data_tds[2]
+                                        live_h, live_l, live_a = data_tds[3], data_tds[4], data_tds[5]
+                                        
+                                        init_l_num = parse_asian_handicap(init_l)
+                                        live_l_num = parse_asian_handicap(live_l)
+                                        
+                                        asian_str = f"初[{init_h}/{init_l_num}/{init_a}] ➔ 終[{live_h}/{live_l_num}/{live_a}]"
+                                        asian_line_change = f"(盤變: {init_l_num} ➔ {live_l_num})" if init_l_num != live_l_num else ""
+                                        break
             except Exception:
                 pass
-        # ==========================================
 
         return {
             'match_id': match_id,
@@ -306,30 +280,16 @@ def fetch_main_page_html():
         try:
             driver = webdriver.Chrome(options=options)
             driver.set_page_load_timeout(20)
-            
-            try:
-                driver.get("https://live.titan007.com/indexall_big.aspx")
-            except Exception:
-                pass
-
-            try:
-                WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located((By.XPATH, "//tr[starts-with(@id, 'tr1_')]"))
-                )
-            except Exception:
-                pass
-
+            driver.get("https://live.titan007.com/indexall_big.aspx")
+            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, "//tr[starts-with(@id, 'tr1_')]")))
             html = driver.page_source
-            if html and "tr1_" in html:
-                return html
+            if html and "tr1_" in html: return html
         except Exception:
             pass
         finally:
             if driver:
-                try:
-                    driver.quit()
-                except Exception:
-                    pass
+                try: driver.quit()
+                except Exception: pass
         time.sleep(2)
     return ""
 
@@ -339,8 +299,7 @@ def run_scraper_once():
     cleanup_old_records(current_scan_time)
 
     page_html = fetch_main_page_html()
-    if not page_html:
-        return
+    if not page_html: return
 
     try:
         soup = BeautifulSoup(page_html, 'html.parser')
@@ -359,7 +318,6 @@ def run_scraper_once():
             away = (tr.find(id=f"team2_{match_id}").text.strip() if tr.find(id=f"team2_{match_id}") else "")
             
             raw_match_time = (tr.find(id=f"mt_{match_id}").text.strip() if tr.find(id=f"mt_{match_id}") else (tds[2].text.strip() if len(tds)>2 else ""))
-            
             time_m = TIME_EXTRACT_RE.search(raw_match_time)
             match_dt = current_scan_time
             formatted_time = raw_match_time
@@ -389,10 +347,7 @@ def run_scraper_once():
                 msg += f"⚽ {r['info']['home']} vs {r['info']['away']}\n"
                 msg += f"📊 凱利: 初[{r['initStr']}] ➔ 即[{live_str}]\n"
                 msg += f"🔻 最低項跌: {r['hits_str']}\n"
-                if r['asian_str'] != "--":
-                    msg += f"📐 亞讓: {r['asian_str']} {r['asian_line_change']}".strip()
-                else:
-                    msg += "📐 亞讓: 暫無平博數據"
+                msg += f"📐 亞讓: {r['asian_str']} {r['asian_line_change']}".strip() if r['asian_str'] != "--" else "📐 亞讓: 暫無平博數據"
 
                 valid_alerts.append({'match_dt': r['info']['match_dt'], 'msg': msg})
                 
