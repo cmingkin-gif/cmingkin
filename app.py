@@ -102,6 +102,55 @@ def cleanup_old_records(current_time):
     expired_ids = [m_id for m_id, data in recorded_matches.items() if current_time - data.get('updated_at', current_time) > timedelta(hours=24)]
     for m_id in expired_ids: del recorded_matches[m_id]
 
+def parse_asian_handicap(handicap_str):
+    """將球探網的中文字串盤口轉換為國際標準數值 (如 -0.25, +1, 0)"""
+    h_str = str(handicap_str).replace(" ", "")
+    if not h_str:
+        return ""
+    if h_str == "平手":
+        return "0"
+
+    is_receive = False
+    if "受让" in h_str:
+        is_receive = True
+        h_str = h_str.replace("受让", "")
+    elif "让" in h_str:
+        is_receive = False
+        h_str = h_str.replace("让", "")
+    else:
+        # 如果沒有標明，預設主隊為讓方 (-)
+        is_receive = False
+        
+    sign = "+" if is_receive else "-"
+
+    mapping = {
+        "平手/半球": "0.25", "平/半": "0.25",
+        "半球": "0.5",
+        "半球/一球": "0.75", "半/一": "0.75",
+        "一球": "1",
+        "一球/球半": "1.25", "一/球半": "1.25",
+        "球半": "1.5",
+        "球半/两球": "1.75", "球半/两": "1.75",
+        "两球": "2",
+        "两球/两球半": "2.25", "两/两半": "2.25",
+        "两球半": "2.5",
+        "两球半/三球": "2.75", "两半/三": "2.75",
+        "三球": "3",
+        "三球/三球半": "3.25", "三/三半": "3.25",
+        "三球半": "3.5",
+        "三球半/四球": "3.75", "三半/四": "3.75",
+        "四球": "4",
+        "四球/四球半": "4.25", "四/四半": "4.25",
+        "四球半": "4.5",
+        "四球半/五球": "4.75", "四半/五": "4.75",
+        "五球": "5"
+    }
+
+    val = mapping.get(h_str)
+    if val:
+        return f"{sign}{val}"
+    return handicap_str
+
 def process_single_match(match_info):
     match_id = match_info['match_id']
     odds_url = f"https://1x2d.titan007.com/{match_id}.js?t={int(time.time()*1000)}"
@@ -167,7 +216,7 @@ def process_single_match(match_info):
         if hits: is_qualifying = True
         
         # ==========================================
-        # ⚡ 僅在「凱利達標」時，才觸發抓取平博亞盤 (極速省流)
+        # ⚡ 抓取平博「亞讓」並數字化處理
         # ==========================================
         asian_str = "--"
         asian_line_change = ""
@@ -181,6 +230,7 @@ def process_single_match(match_info):
                     a_html = a_res.text
                     found_asian = False
                     
+                    # 方案 1: JS 提取
                     game_data_match_a = GAME_ARRAY_RE.search(a_html)
                     if game_data_match_a:
                         games_a = GAME_ITEM_RE.findall(game_data_match_a.group(1))
@@ -191,22 +241,32 @@ def process_single_match(match_info):
                                 if len(f_a) >= name_idx + 7:
                                     init_h, init_l, init_a = f_a[name_idx+1], f_a[name_idx+2], f_a[name_idx+3]
                                     live_h, live_l, live_a = f_a[name_idx+4], f_a[name_idx+5], f_a[name_idx+6]
-                                    asian_str = f"初[{init_h} / {init_l} / {init_a}] ➔ 即[{live_h} / {live_l} / {live_a}]"
-                                    asian_line_change = f"(盤變: {init_l}➔{live_l})" if init_l != live_l else ""
+                                    
+                                    init_l_num = parse_asian_handicap(init_l)
+                                    live_l_num = parse_asian_handicap(live_l)
+                                    
+                                    asian_str = f"初[{init_h}/{init_l_num}/{init_a}] ➔ 終[{live_h}/{live_l_num}/{live_a}]"
+                                    asian_line_change = f"(盤變: {init_l_num} ➔ {live_l_num})" if init_l_num != live_l_num else ""
                                     found_asian = True
                                 break
                     
+                    # 方案 2: HTML 提取
                     if not found_asian:
                         soup_a = BeautifulSoup(a_html, 'html.parser')
                         for tr in soup_a.find_all('tr'):
                             tds = [td.get_text(strip=True) for td in tr.find_all('td')]
                             if any('平博' in t or 'Pinnacle' in t or 'Pinna' in t for t in tds):
                                 n_idx = next(i for i, v in enumerate(tds) if '平博' in v or 'Pinnacle' in v or 'Pinna' in v)
-                                if len(tds) >= n_idx + 7:
-                                    init_h, init_l, init_a = tds[n_idx+1], tds[n_idx+2], tds[n_idx+3]
-                                    live_h, live_l, live_a = tds[n_idx+4], tds[n_idx+5], tds[n_idx+6]
-                                    asian_str = f"初[{init_h} / {init_l} / {init_a}] ➔ 即[{live_h} / {live_l} / {live_a}]"
-                                    asian_line_change = f"(盤變: {init_l}➔{live_l})" if init_l != live_l else ""
+                                data_tds = [t for t in tds[n_idx+1:] if t.strip() not in ('', '+', '荐')]
+                                if len(data_tds) >= 6:
+                                    init_h, init_l, init_a = data_tds[0], data_tds[1], data_tds[2]
+                                    live_h, live_l, live_a = data_tds[3], data_tds[4], data_tds[5]
+                                    
+                                    init_l_num = parse_asian_handicap(init_l)
+                                    live_l_num = parse_asian_handicap(live_l)
+                                    
+                                    asian_str = f"初[{init_h}/{init_l_num}/{init_a}] ➔ 終[{live_h}/{live_l_num}/{live_a}]"
+                                    asian_line_change = f"(盤變: {init_l_num} ➔ {live_l_num})" if init_l_num != live_l_num else ""
                                 break
             except Exception:
                 pass
@@ -323,15 +383,14 @@ def run_scraper_once():
         for r in results:
             m_id, is_qualifying, live_str = r['match_id'], r['is_qualifying'], r['liveStr']
             if is_qualifying:
-                # 修正：字眼改為「凱利」與「最低項跌」
                 msg = f"🏆 {r['info']['league']} | ⏱ {r['info']['time']}\n"
                 msg += f"⚽ {r['info']['home']} vs {r['info']['away']}\n"
                 msg += f"📊 凱利: 初[{r['initStr']}] ➔ 即[{live_str}]\n"
                 msg += f"🔻 最低項跌: {r['hits_str']}\n"
                 if r['asian_str'] != "--":
-                    msg += f"📐 亞盤: {r['asian_str']} {r['asian_line_change']}".strip()
+                    msg += f"📐 亞讓: {r['asian_str']} {r['asian_line_change']}".strip()
                 else:
-                    msg += "📐 亞盤: 暫無平博數據"
+                    msg += "📐 亞讓: 暫無平博數據"
 
                 valid_alerts.append({'match_dt': r['info']['match_dt'], 'msg': msg})
                 
