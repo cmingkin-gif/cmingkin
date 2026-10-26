@@ -102,7 +102,7 @@ def cleanup_old_records(current_time):
     expired_ids = [m_id for m_id, data in recorded_matches.items() if current_time - data.get('updated_at', current_time) > timedelta(hours=24)]
     for m_id in expired_ids: del recorded_matches[m_id]
 
-# 📐 亞盤轉換邏輯 (更新：主隊讓球為正數，受讓為負數)
+# 📐 亞盤轉換邏輯 (主隊讓球為正數，受讓為負數)
 def parse_asian_handicap(handicap_str):
     h_str = str(handicap_str).replace(" ", "")
     if not h_str: return ""
@@ -116,7 +116,7 @@ def parse_asian_handicap(handicap_str):
         is_receive = False
         h_str = h_str.replace("让", "")
         
-    sign = "-" if is_receive else ""  # 主隊受讓用負號，主隊讓球無符號(即正數)
+    sign = "-" if is_receive else ""  
     mapping = {
         "平手/半球": "0.25", "平/半": "0.25", "半球": "0.5", "半球/一球": "0.75", "半/一": "0.75",
         "一球": "1", "一球/球半": "1.25", "一/球半": "1.25", "球半": "1.5", "球半/两球": "1.75", "球半/两": "1.75",
@@ -130,9 +130,11 @@ def parse_asian_handicap(handicap_str):
 # 🤖 AI 盤口分析引擎
 def get_ai_analysis(league, home, away, init_k, live_k, hits_str, asian_info):
     if not GEMINI_API_KEY: 
+        print("⚠️ 找不到 GEMINI_API_KEY")
         return ""
     
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+    # 💡 已經修正為正確嘅 gemini-1.5-flash
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
     prompt = f"""
     你是一個專業、冷靜且敏銳的足球盤口分析師。你的任務是透過莊家數據判斷真實意圖，找出是否有誘盤或避險動作。
     
@@ -152,7 +154,7 @@ def get_ai_analysis(league, home, away, init_k, live_k, hits_str, asian_info):
     
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 150} # 低 temperature 保持理性客觀
+        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 150}
     }
     
     try:
@@ -162,9 +164,10 @@ def get_ai_analysis(league, home, away, init_k, live_k, hits_str, asian_info):
             analysis_text = data['candidates'][0]['content']['parts'][0]['text'].strip()
             return f"\n💡 【AI 盤口分析】\n{analysis_text}"
         else:
+            print(f"⚠️ API 錯誤 ({res.status_code}): {res.text}")
             return ""
     except Exception as e:
-        print(f"⚠️ AI 請求超時或出錯: {e}")
+        print(f"⚠️ AI 請求出錯: {e}")
         return ""
 
 def process_single_match(match_info):
