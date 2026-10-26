@@ -134,7 +134,7 @@ def get_ai_analysis(league, home, away, init_k, live_k, hits_str, asian_info):
         return ""
     
     # 🎯 已經鎖定最適合 7x24 運作嘅 gemini-2.5-flash
-    model_name = "gemini-2.5-flash"
+   model_name = "gemini-flash-latest"
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
     
     prompt = f"""
