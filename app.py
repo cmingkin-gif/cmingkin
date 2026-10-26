@@ -35,12 +35,8 @@ recorded_matches = {}
 # 🎯 平博識別關鍵字
 PINNACLE_KEYWORDS = ('平博', 'Pinnacle', 'Pinna', '平*')
 
-# 🤖 Google 官方最新提示之模型清單
-CANDIDATE_MODELS = [
-    "gemini-3.8-flash",
-    "gemini-3.5-flash-lite"
-]
-WORKING_PROVIDER = None  # 記錄成功跑通嘅免費通道
+CANDIDATE_MODELS = ["gemini-3.8-flash", "gemini-3.5-flash-lite"]
+WORKING_PROVIDER = None 
 
 GAME_ARRAY_RE = re.compile(r'game=Array\((.*?)\);', re.DOTALL)
 GAME_ITEM_RE = re.compile(r'"(.*?)"')
@@ -110,7 +106,6 @@ def cleanup_old_records(current_time):
     expired_ids = [m_id for m_id, data in recorded_matches.items() if current_time - data.get('updated_at', current_time) > timedelta(hours=24)]
     for m_id in expired_ids: del recorded_matches[m_id]
 
-# 📐 亞盤轉換邏輯 (主隊讓球為正數，受讓為負數)
 def parse_asian_handicap(handicap_str):
     h_str = str(handicap_str).replace(" ", "")
     if not h_str: return ""
@@ -135,7 +130,6 @@ def parse_asian_handicap(handicap_str):
     val = mapping.get(h_str)
     return f"{sign}{val}" if val else handicap_str
 
-# 🤖 AI 盤口分析引擎 (三保險 100% 免費版：Gemini 3.8 ➔ GitHub GPT-4o-mini ➔ 免Key免費AI)
 def get_ai_analysis(league, home, away, init_k, live_k, hits_str, asian_info):
     global WORKING_PROVIDER
     
@@ -154,7 +148,7 @@ def get_ai_analysis(league, home, away, init_k, live_k, hits_str, asian_info):
 🎯 綜合勝出預測：[主勝 / 客勝 / 和局]，信心度：[⭐ 到 ⭐⭐⭐⭐⭐]
 📝 莊家意圖：[一句話總結歐亞走勢是否一致，莊家是在真實避險還是故意誘盤]"""
 
-    # 1️⃣ 通道一：嘗試 Google Gemini 3.8 / 3.5 (如果尚未被判定為 402 鎖區)
+    # 通道一：Google Gemini
     if GEMINI_API_KEY and WORKING_PROVIDER not in ("github", "free_fallback"):
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
@@ -169,14 +163,14 @@ def get_ai_analysis(league, home, away, init_k, live_k, hits_str, asian_info):
                     data = res.json()
                     analysis_text = data['candidates'][0]['content']['parts'][0]['text'].strip()
                     WORKING_PROVIDER = model_name
-                    print(f"✅ 成功使用 Google 免費模型: {model_name}")
+                    print(f"✅ 成功使用 Google 模型: {model_name}")
                     return f"\n💡 【AI 盤口分析】\n{analysis_text}"
                 else:
-                    print(f"⚠️ Google 模型 '{model_name}' 無法使用 (狀態碼 {res.status_code})，準備切換免費後備 AI...")
+                    print(f"⚠️ Google 模型 '{model_name}' 無法使用 (狀態碼 {res.status_code})")
             except Exception as e:
-                print(f"⚠️ Google 模型請求異常: {e}")
+                pass
 
-    # 2️⃣ 通道二：GitHub 官方內置免費 AI (GPT-4o-mini)
+    # 通道二：GitHub Models (GPT-4o-mini) - 最穩定免費通道
     if GITHUB_TOKEN and WORKING_PROVIDER != "free_fallback":
         try:
             gh_url = "https://models.github.ai/inference/chat/completions"
@@ -185,7 +179,7 @@ def get_ai_analysis(league, home, away, init_k, live_k, hits_str, asian_info):
                 "Content-Type": "application/json"
             }
             gh_payload = {
-                "model": "openai/gpt-4o-mini",
+                "model": "gpt-4o-mini",
                 "messages": [
                     {"role": "system", "content": "你是一個專業的足球盤口與凱利指數分析師，只使用繁體中文回答。"},
                     {"role": "user", "content": prompt}
@@ -201,32 +195,34 @@ def get_ai_analysis(league, home, away, init_k, live_k, hits_str, asian_info):
                     print("✅ 成功切換至 GitHub 內置免費模型: GPT-4o-mini")
                 return f"\n💡 【AI 盤口分析】\n{analysis_text}"
             else:
-                print(f"⚠️ GitHub Models 狀態碼 ({res.status_code})，切換至免 Key 免費通道...")
+                print(f"⚠️ GitHub Models 狀態碼 ({res.status_code})，切換至免 Key 通道...")
         except Exception as e:
             print(f"⚠️ GitHub Models 請求異常: {e}")
 
-    # 3️⃣ 通道三：免 API Key 7x24 免費 AI 通道 (零設定保底)
-    try:
-        free_url = "https://text.pollinations.ai/openai"
-        free_payload = {
-            "model": "openai",
-            "messages": [
-                {"role": "system", "content": "你是一個專業的足球盤口與凱利指數分析師，只使用繁體中文回答。"},
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.3
-        }
-        res = requests.post(free_url, json=free_payload, timeout=15)
-        if res.status_code == 200:
-            analysis_text = res.json()['choices'][0]['message']['content'].strip()
-            if WORKING_PROVIDER != "free_fallback":
-                WORKING_PROVIDER = "free_fallback"
-                print("✅ 成功啟用 7x24 免 Key 免費 AI 分析通道！")
-            return f"\n💡 【AI 盤口分析】\n{analysis_text}"
-        else:
-            print(f"⚠️ 免 Key 通道返回狀態碼: {res.status_code}")
-    except Exception as e:
-        print(f"⚠️ 免 Key 通道請求出錯: {e}")
+    # 通道三：免 API Key 保底通道 (增加重試機制與延長等待)
+    for attempt in range(2):
+        try:
+            free_url = "https://text.pollinations.ai/openai"
+            free_payload = {
+                "model": "openai",
+                "messages": [
+                    {"role": "system", "content": "你是一個專業的足球盤口與凱利指數分析師，只使用繁體中文回答。"},
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.3
+            }
+            res = requests.post(free_url, json=free_payload, timeout=25)
+            if res.status_code == 200:
+                analysis_text = res.json()['choices'][0]['message']['content'].strip()
+                if WORKING_PROVIDER != "free_fallback":
+                    WORKING_PROVIDER = "free_fallback"
+                    print("✅ 成功啟用 7x24 免 Key 免費 AI 分析通道！")
+                return f"\n💡 【AI 盤口分析】\n{analysis_text}"
+            else:
+                print(f"⚠️ 免 Key 通道返回狀態碼: {res.status_code}")
+        except Exception as e:
+            print(f"⚠️ 免 Key 通道請求出錯 (第 {attempt+1} 次): {e}")
+            time.sleep(2)
 
     return ""
 
@@ -448,7 +444,6 @@ def run_scraper_once():
                 msg += f"🔻 最低項跌: {r['hits_str']}\n"
                 msg += f"📐 亞讓: {full_asian_info}"
 
-                # 🤖 呼叫 AI 進行分析
                 ai_reply = get_ai_analysis(
                     league=r['info']['league'], 
                     home=r['info']['home'], 
