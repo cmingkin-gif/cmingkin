@@ -19,11 +19,6 @@
     "live_str": "0.89/1.12/1.17",
     "updated_at": "2026-10-26T03:00:34.615293"
   },
-  "2913563": {
-    "state": "qualifying",
-    "live_str": "0.90/1.03/1.10",
-    "updated_at": "2026-10-25T22:15:23.609214"
-  },
   "2957086": {
     "state": "unqualifying",
     "live_str": "0.85/0.93/0.94",
@@ -33,11 +28,6 @@
     "state": "qualifying",
     "live_str": "0.97/0.86/0.89",
     "updated_at": "2026-10-25T22:45:25.787607"
-  },
-  "3105414": {
-    "state": "unqualifying",
-    "live_str": "0.88/0.86/0.95",
-    "updated_at": "2026-10-25T22:15:23.609214"
   },
   "3106644": {
     "state": "qualifying",
@@ -83,11 +73,6 @@
     "state": "unqualifying",
     "live_str": "0.96/0.88/0.85",
     "updated_at": "2026-10-25T23:00:36.968339"
-  },
-  "2937637": {
-    "state": "unqualifying",
-    "live_str": "0.88/0.90/0.93",
-    "updated_at": "2026-10-25T22:15:23.609214"
   },
   "3010065": {
     "state": "unqualifying",
@@ -307,7 +292,7 @@
   "3021650": {
     "state": "qualifying",
     "live_str": "0.89/0.90/0.92",
-    "updated_at": "2026-10-26T22:10:45.337973"
+    "updated_at": "2026-10-26T22:15:28.870115"
   },
   "3047402": {
     "state": "unqualifying",
@@ -357,7 +342,7 @@
   "3106819": {
     "state": "qualifying",
     "live_str": "0.92/0.85/0.91",
-    "updated_at": "2026-10-26T22:10:45.337973"
+    "updated_at": "2026-10-26T22:15:28.870115"
   },
   "3105845": {
     "state": "unqualifying",
@@ -372,7 +357,7 @@
   "2934869": {
     "state": "qualifying",
     "live_str": "0.93/0.93/0.81",
-    "updated_at": "2026-10-26T22:10:45.337973"
+    "updated_at": "2026-10-26T22:15:28.870115"
   },
   "3103224": {
     "state": "unqualifying",
@@ -382,11 +367,11 @@
   "3106820": {
     "state": "qualifying",
     "live_str": "0.98/0.85/0.85",
-    "updated_at": "2026-10-26T22:10:45.337973"
+    "updated_at": "2026-10-26T22:15:28.870115"
   },
   "2967738": {
     "state": "qualifying",
     "live_str": "0.85/0.80/1.07",
-    "updated_at": "2026-10-26T22:10:45.337973"
+    "updated_at": "2026-10-26T22:15:28.870115"
   }
 }
