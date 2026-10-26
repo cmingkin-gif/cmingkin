@@ -47,7 +47,8 @@ def create_robust_session():
         "Connection": "keep-alive"
     })
     retry_strategy = Retry(total=2, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504], allowed_methods=["GET"])
-    adapter = HTTPAdapter(pool_connections=50, pool_maxsize=50, max_retries=retry_strategy)
+    # 🚀 穩定加速：將連線池上限推高到 100，完美配合百線程並發
+    adapter = HTTPAdapter(pool_connections=100, pool_maxsize=100, max_retries=retry_strategy)
     s.mount("https://", adapter)
     s.mount("http://", adapter)
     return s
@@ -330,9 +331,9 @@ def run_scraper_once():
                 
             match_infos.append({'match_id': match_id, 'league': tds[1].text.strip() if len(tds)>1 else "", 'time': formatted_time, 'match_dt': match_dt, 'home': home, 'away': away})
             
-        # 第一階段：多線程快速篩選凱利
+        # 🚀 穩定加速：第一階段多線程快速篩選，線程數推上 100
         results = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=45) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
             future_to_match = {executor.submit(process_single_match, info): info for info in match_infos}
             for future in concurrent.futures.as_completed(future_to_match, timeout=45):
                 res = future.result()
@@ -351,7 +352,8 @@ def run_scraper_once():
                 
                 msg = f"🏆 {r['info']['league']} | ⏱ {r['info']['time']}\n"
                 msg += f"⚽ {r['info']['home']} vs {r['info']['away']}\n"
-                msg += f"📊 凱利: 初[{r['initStr']}] ➔ 即[{live_str}]\n"
+                # 📝 已刪除「凱利:」字眼
+                msg += f"📊 初[{r['initStr']}] ➔ 即[{live_str}]\n"
                 msg += f"🔻 最低項跌: {r['hits_str']}\n"
                 msg += f"📐 亞讓: {asian_str} {asian_line_change}".strip() if asian_str != "--" else "📐 亞讓: 暫無平博數據"
 
