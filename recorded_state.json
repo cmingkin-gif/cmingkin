@@ -1,9 +1,4 @@
 {
-  "2908870": {
-    "state": "qualifying",
-    "live_str": "0.95/0.91/0.97",
-    "updated_at": "2026-10-25T10:30:29.385950"
-  },
   "3067143": {
     "state": "unqualifying",
     "live_str": "0.91/0.98/0.99",
@@ -23,11 +18,6 @@
     "state": "qualifying",
     "live_str": "0.95/0.91/0.81",
     "updated_at": "2026-10-25T10:45:35.230363"
-  },
-  "2957085": {
-    "state": "qualifying",
-    "live_str": "0.84/1.04/1.13",
-    "updated_at": "2026-10-25T10:30:29.385950"
   },
   "3017424": {
     "state": "unqualifying",
