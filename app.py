@@ -34,6 +34,16 @@ recorded_matches = {}
 # 🎯 平博識別關鍵字
 PINNACLE_KEYWORDS = ('平博', 'Pinnacle', 'Pinna', '平*')
 
+# 🤖 候選免費聰明模型清單 (會自動按順序測試並鎖定可用嘅免費模型)
+CANDIDATE_MODELS = [
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-flash-lite-latest",
+    "gemma-4-31b-it",
+    "gemma-4-26b-a4b-it"
+]
+WORKING_MODEL = None
+
 GAME_ARRAY_RE = re.compile(r'game=Array\((.*?)\);', re.DOTALL)
 GAME_ITEM_RE = re.compile(r'"(.*?)"')
 TIME_EXTRACT_RE = re.compile(r'(\d{2}:\d{2})')
@@ -127,15 +137,12 @@ def parse_asian_handicap(handicap_str):
     val = mapping.get(h_str)
     return f"{sign}{val}" if val else handicap_str
 
-# 🤖 AI 盤口分析引擎 (萬能防 Bug 版)
+# 🤖 AI 盤口分析引擎 (自動尋找免費可用模型版)
 def get_ai_analysis(league, home, away, init_k, live_k, hits_str, asian_info):
+    global WORKING_MODEL
     if not GEMINI_API_KEY: 
         print("⚠️ 找不到 GEMINI_API_KEY")
         return ""
-    
-    # 🚀 使用萬能別名，Google 會自動幫你連去最新最穩嘅 Flash 模型，無懼 404 Bug！
-    model_name = "gemini-flash-latest"
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
     
     prompt = f"""
     你是一個專業、冷靜且敏銳的足球盤口分析師。你的任務是透過莊家數據判斷真實意圖，找出是否有誘盤或避險動作。
@@ -159,35 +166,31 @@ def get_ai_analysis(league, home, away, init_k, live_k, hits_str, asian_info):
         "generationConfig": {"temperature": 0.3, "maxOutputTokens": 150}
     }
     
-    try:
-        res = requests.post(url, json=payload, timeout=10)
-        if res.status_code == 200:
-            data = res.json()
-            analysis_text = data['candidates'][0]['content']['parts'][0]['text'].strip()
-            return f"\n💡 【AI 盤口分析】\n{analysis_text}"
-            
-        elif res.status_code == 404:
-            print(f"⚠️ API 錯誤 (404): 找不到模型 '{model_name}'。")
-            print("🔄 正在向 Google 查詢你個帳號專屬嘅可用模型清單...")
-            # 絕招：向 Google API 查詢可用模型
-            list_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_API_KEY}"
-            list_res = requests.get(list_url, timeout=10)
-            if list_res.status_code == 200:
-                models_data = list_res.json()
-                # 過濾並抽取出所有支援生成內容嘅模型名
-                available_models = [m['name'].replace('models/', '') for m in models_data.get('models', []) if 'generateContent' in m.get('supportedGenerationMethods', [])]
-                print(f"✅ 查詢成功！請將代碼第 106 行嘅 model_name 更改為以下其中一個：\n{available_models}")
+    models_to_try = [WORKING_MODEL] if WORKING_MODEL else CANDIDATE_MODELS
+    
+    for model_name in models_to_try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
+        try:
+            res = requests.post(url, json=payload, timeout=10)
+            if res.status_code == 200:
+                data = res.json()
+                analysis_text = data['candidates'][0]['content']['parts'][0]['text'].strip()
+                if not WORKING_MODEL:
+                    WORKING_MODEL = model_name
+                    print(f"✅ 成功鎖定免費可用模型: {model_name}")
+                return f"\n💡 【AI 盤口分析】\n{analysis_text}"
+            elif res.status_code == 402:
+                print(f"⚠️ 模型 '{model_name}' 返回 402 (需要預付費額度)，正在自動嘗試下一個免費模型...")
+                continue
             else:
-                print(f"⚠️ 無法獲取模型列表，狀態碼: {list_res.status_code}")
-            return ""
-            
-        else:
-            print(f"⚠️ API 錯誤 ({res.status_code}): {res.text}")
-            return ""
-            
-    except Exception as e:
-        print(f"⚠️ AI 請求出錯: {e}")
-        return ""
+                print(f"⚠️ 模型 '{model_name}' API 錯誤 ({res.status_code}): {res.text}")
+                continue
+        except Exception as e:
+            print(f"⚠️ 模型 '{model_name}' 請求出錯: {e}")
+            continue
+
+    print("❌ 所有候選模型均無法使用。如果全部返回 402，代表你的 Google 專案被設為預付費 (Prepay) 且餘額為 0。")
+    return ""
 
 def process_single_match(match_info):
     match_id = match_info['match_id']
