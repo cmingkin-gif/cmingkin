@@ -127,14 +127,14 @@ def parse_asian_handicap(handicap_str):
     val = mapping.get(h_str)
     return f"{sign}{val}" if val else handicap_str
 
-# 🤖 AI 盤口分析引擎 (升級自檢版)
+# 🤖 AI 盤口分析引擎 (萬能防 Bug 版)
 def get_ai_analysis(league, home, away, init_k, live_k, hits_str, asian_info):
     if not GEMINI_API_KEY: 
         print("⚠️ 找不到 GEMINI_API_KEY")
         return ""
     
-    # 🎯 已經鎖定最適合 7x24 運作嘅 gemini-2.5-flash
-   model_name = "gemini-flash-latest"
+    # 🚀 使用萬能別名，Google 會自動幫你連去最新最穩嘅 Flash 模型，無懼 404 Bug！
+    model_name = "gemini-flash-latest"
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
     
     prompt = f"""
