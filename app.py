@@ -22,9 +22,10 @@ os.environ["TZ"] = "Asia/Hong_Kong"
 if hasattr(time, "tzset"):
     time.tzset()
 
-# === Telegram 認證資訊 ===
+# === 認證資訊 ===
 TELEGRAM_TOKEN = os.environ.get("TG_TOKEN")
 CHAT_ID = os.environ.get("TG_CHAT_ID")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")  # 🤖 AI 分析師鎖匙
 
 USE_TITAN_KELLY_MODE = True
 STATE_FILE = "recorded_state.json"
@@ -47,7 +48,6 @@ def create_robust_session():
         "Connection": "keep-alive"
     })
     retry_strategy = Retry(total=2, backoff_factor=0.3, status_forcelist=[429, 500, 502, 503, 504], allowed_methods=["GET"])
-    # 🚀 穩定加速：將連線池上限推高到 100，完美配合百線程並發
     adapter = HTTPAdapter(pool_connections=100, pool_maxsize=100, max_retries=retry_strategy)
     s.mount("https://", adapter)
     s.mount("http://", adapter)
@@ -94,7 +94,7 @@ def send_telegram_message(text):
         payload = {"chat_id": CHAT_ID, "text": chunk}
         for _ in range(2):
             try:
-                if session.post(url, json=payload, timeout=10).status_code == 200: break
+                if requests.post(url, json=payload, timeout=10).status_code == 200: break
             except Exception:
                 time.sleep(1)
 
@@ -102,8 +102,8 @@ def cleanup_old_records(current_time):
     expired_ids = [m_id for m_id, data in recorded_matches.items() if current_time - data.get('updated_at', current_time) > timedelta(hours=24)]
     for m_id in expired_ids: del recorded_matches[m_id]
 
+# 📐 亞盤轉換邏輯 (更新：主隊讓球為正數，受讓為負數)
 def parse_asian_handicap(handicap_str):
-    """轉換亞洲盤口為數字"""
     h_str = str(handicap_str).replace(" ", "")
     if not h_str: return ""
     if h_str == "平手": return "0"
@@ -116,8 +116,7 @@ def parse_asian_handicap(handicap_str):
         is_receive = False
         h_str = h_str.replace("让", "")
         
-    sign = "+" if is_receive else "-"
-
+    sign = "-" if is_receive else ""  # 主隊受讓用負號，主隊讓球無符號(即正數)
     mapping = {
         "平手/半球": "0.25", "平/半": "0.25", "半球": "0.5", "半球/一球": "0.75", "半/一": "0.75",
         "一球": "1", "一球/球半": "1.25", "一/球半": "1.25", "球半": "1.5", "球半/两球": "1.75", "球半/两": "1.75",
@@ -128,8 +127,47 @@ def parse_asian_handicap(handicap_str):
     val = mapping.get(h_str)
     return f"{sign}{val}" if val else handicap_str
 
+# 🤖 AI 盤口分析引擎
+def get_ai_analysis(league, home, away, init_k, live_k, hits_str, asian_info):
+    if not GEMINI_API_KEY: 
+        return ""
+    
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+    prompt = f"""
+    你是一個專業、冷靜且敏銳的足球盤口分析師。你的任務是透過莊家數據判斷真實意圖，找出是否有誘盤或避險動作。
+    
+    【賽事資訊】
+    賽事: {league} | 主隊: {home} vs 客隊: {away}
+    
+    【盤口變化數據】
+    歐賠凱利指數: 初盤[{init_k}] ➔ 即場[{live_k}]
+    最低項資金流向: {hits_str}
+    平博亞讓盤口: {asian_info} (註: 正數代表主隊讓球，負數代表主隊受讓)
+    
+    【分析任務】
+    請簡潔俐落地進行分析。字數嚴格限制在 80 字以內，不要廢話，直接給出結論。格式必須如下：
+    🎯 綜合勝出預測：[主勝 / 客勝 / 和局]，信心度：[⭐ 到 ⭐⭐⭐⭐⭐]
+    📝 莊家意圖：[一句話總結歐亞走勢是否一致，莊家是在真實避險還是故意誘盤]
+    """
+    
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 150} # 低 temperature 保持理性客觀
+    }
+    
+    try:
+        res = requests.post(url, json=payload, timeout=10)
+        if res.status_code == 200:
+            data = res.json()
+            analysis_text = data['candidates'][0]['content']['parts'][0]['text'].strip()
+            return f"\n💡 【AI 盤口分析】\n{analysis_text}"
+        else:
+            return ""
+    except Exception as e:
+        print(f"⚠️ AI 請求超時或出錯: {e}")
+        return ""
+
 def process_single_match(match_info):
-    """第一階段：極速多線程獲取 1x2 歐賠並計算凱利 (只依靠 CDN 靜態資源，無懼攔截)"""
     match_id = match_info['match_id']
     odds_url = f"https://1x2d.titan007.com/{match_id}.js?t={int(time.time()*1000)}"
     try:
@@ -203,7 +241,6 @@ def process_single_match(match_info):
     except Exception: return None
 
 def fetch_asian_odds_with_selenium(qualified_results):
-    """第二階段：只針對【真正達標】嘅賽事開啟真實瀏覽器抓取亞盤 (100% 破解防爬蟲牆)"""
     if not qualified_results: return
     
     options = Options()
@@ -212,15 +249,11 @@ def fetch_asian_odds_with_selenium(qualified_results):
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
-    options.add_argument("--disable-features=VizDisplayCompositor")
-    options.add_argument("--disable-software-rasterizer")
     options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument("--window-size=1920,1080")
     options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
     
     driver = None
     try:
-        print(f"⏳ 啟動專屬瀏覽器抓取 {len(qualified_results)} 場達標賽事嘅亞盤...", flush=True)
         driver = webdriver.Chrome(options=options)
         driver.set_page_load_timeout(20)
         
@@ -230,17 +263,14 @@ def fetch_asian_odds_with_selenium(qualified_results):
             
             try:
                 driver.get(f"https://vip.titan007.com/AsianOdds_n.aspx?id={match_id}&l=0")
-                # 🛑 關鍵：強制等待 3 秒，等球探網防爬蟲 JS 驗證完成並完全生成表格
                 time.sleep(3) 
                 
                 soup_a = BeautifulSoup(driver.page_source, 'html.parser')
                 found = False
                 for tr in soup_a.find_all('tr'):
                     tds = [td.get_text(strip=True) for td in tr.find_all('td')]
-                    # 只要見到包含平博/平*嘅行就攔截
                     if any(k in t for t in tds for k in PINNACLE_KEYWORDS):
                         n_idx = next(i for i, v in enumerate(tds) if any(k in v for k in PINNACLE_KEYWORDS))
-                        # 智能過濾 +號、早盤、走地等干擾字元
                         data_tds = [t for t in tds[n_idx+1:] if t not in ('', '+', '荐', '封', '走', '早')]
                         if len(data_tds) >= 6:
                             init_h, init_l, init_a = data_tds[0], data_tds[1], data_tds[2]
@@ -253,8 +283,8 @@ def fetch_asian_odds_with_selenium(qualified_results):
                             asian_line_change = f"(盤變: {init_l_num} ➔ {live_l_num})" if init_l_num != live_l_num else ""
                             found = True
                             break
-            except Exception as e:
-                print(f"❌ 抓取亞盤時出錯 {match_id}: {e}", flush=True)
+            except Exception:
+                pass
             
             r['asian_str'] = asian_str
             r['asian_line_change'] = asian_line_change
@@ -331,7 +361,6 @@ def run_scraper_once():
                 
             match_infos.append({'match_id': match_id, 'league': tds[1].text.strip() if len(tds)>1 else "", 'time': formatted_time, 'match_dt': match_dt, 'home': home, 'away': away})
             
-        # 🚀 穩定加速：第一階段多線程快速篩選，線程數推上 100
         results = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
             future_to_match = {executor.submit(process_single_match, info): info for info in match_infos}
@@ -339,7 +368,6 @@ def run_scraper_once():
                 res = future.result()
                 if res: results.append(res)
         
-        # 第二階段：對達標賽事進行 Selenium 亞盤破解
         qualified_results = [r for r in results if r['is_qualifying']]
         fetch_asian_odds_with_selenium(qualified_results)
                     
@@ -349,13 +377,27 @@ def run_scraper_once():
             if is_qualifying:
                 asian_str = r.get('asian_str', '--')
                 asian_line_change = r.get('asian_line_change', '')
+                full_asian_info = f"{asian_str} {asian_line_change}".strip() if asian_str != "--" else "暫無平博數據"
                 
                 msg = f"🏆 {r['info']['league']} | ⏱ {r['info']['time']}\n"
                 msg += f"⚽ {r['info']['home']} vs {r['info']['away']}\n"
-                # 📝 已刪除「凱利:」字眼
                 msg += f"📊 初[{r['initStr']}] ➔ 即[{live_str}]\n"
                 msg += f"🔻 最低項跌: {r['hits_str']}\n"
-                msg += f"📐 亞讓: {asian_str} {asian_line_change}".strip() if asian_str != "--" else "📐 亞讓: 暫無平博數據"
+                msg += f"📐 亞讓: {full_asian_info}"
+
+                # 🤖 呼叫 AI 進行分析
+                ai_reply = get_ai_analysis(
+                    league=r['info']['league'], 
+                    home=r['info']['home'], 
+                    away=r['info']['away'], 
+                    init_k=r['initStr'], 
+                    live_k=live_str, 
+                    hits_str=r['hits_str'], 
+                    asian_info=full_asian_info
+                )
+                if ai_reply:
+                    msg += f"\n{ai_reply}"
+                    time.sleep(1) # 稍作停頓防 Rate Limit
 
                 valid_alerts.append({'match_dt': r['info']['match_dt'], 'msg': msg})
                 
