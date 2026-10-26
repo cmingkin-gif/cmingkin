@@ -138,42 +138,45 @@ def get_ai_analysis(league, home, away, init_k, live_k, hits_str, asian_info):
 【盤口變化數據】
 歐賠凱利指數: 初盤[{init_k}] ➔ 即場[{live_k}]
 最低項資金流向: {hits_str}
-平博亞讓盤口: {asian_info} (註: 正數代表主隊讓球，負數代表主隊受讓)
+平博亞讓盤口: {asian_info} (註: 正數代表主隊讓球，負數代表主隊受让)
 
 【分析任務】
 請簡潔俐落地進行分析。字數嚴格限制在 80 字以內，不要廢話，直接給出結論。格式必須嚴格如下：
 🎯 綜合勝出預測：[主勝 / 客勝 / 和局]，信心度：[⭐ 到 ⭐⭐⭐⭐⭐]
 📝 莊家意圖：[一句話總結歐亞走勢是否一致，莊家是在真實避險還是故意誘盤]"""
 
-    try:
-        # 使用官方最穩定嘅 Azure 終端節點
-        gh_url = "https://models.inference.ai.azure.com/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {GITHUB_TOKEN}",
-            "Content-Type": "application/json"
-        }
-        gh_payload = {
-            "model": "gpt-4o-mini",
-            "messages": [
-                {"role": "system", "content": "你是一個專業的足球盤口與凱利指數分析師，只使用繁體中文回答。"},
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.3,
-            "max_tokens": 180
-        }
-        res = requests.post(gh_url, headers=headers, json=gh_payload, timeout=15)
-        
-        if res.status_code == 200:
-            analysis_text = res.json()['choices'][0]['message']['content'].strip()
-            print("✅ 成功呼叫 GitHub 官方免費 GPT-4o-mini 模型！")
-            return f"\n💡 【AI 盤口分析】\n{analysis_text}"
-        else:
-            print(f"⚠️ API 錯誤 ({res.status_code}): {res.text}")
-            return ""
-            
-    except Exception as e:
-        print(f"⚠️ 請求異常: {e}")
-        return ""
+    gh_url = "https://models.inference.ai.azure.com/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    gh_payload = {
+        "model": "gpt-4o-mini",
+        "messages": [
+            {"role": "system", "content": "你是一個專業的足球盤口與凱利指數分析師，只使用繁體中文回答。"},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.3,
+        "max_tokens": 180
+    }
+
+    # 🛡️ 加入 3 次網絡閃斷重試機制
+    for attempt in range(3):
+        try:
+            res = requests.post(gh_url, headers=headers, json=gh_payload, timeout=20)
+            if res.status_code == 200:
+                analysis_text = res.json()['choices'][0]['message']['content'].strip()
+                print("✅ 成功呼叫 GitHub 官方免費 GPT-4o-mini 模型！")
+                return f"\n💡 【AI 盤口分析】\n{analysis_text}"
+            else:
+                print(f"⚠️ API 錯誤 ({res.status_code}): {res.text}")
+                return ""
+        except requests.exceptions.RequestException as e:
+            print(f"⚠️ 網絡連線異常 (第 {attempt+1} 次嘗試): {e}")
+            if attempt < 2:
+                time.sleep(4)  # 斷線後等 4 秒再試
+            else:
+                return ""
 
 def process_single_match(match_info):
     match_id = match_info['match_id']
@@ -267,7 +270,7 @@ def fetch_asian_odds_with_selenium(qualified_results):
         
         for r in qualified_results:
             match_id = r['match_id']
-            match_dt = r['info']['match_dt']  # 獲取開波時間
+            match_dt = r['info']['match_dt']  
             asian_str, asian_line_change = "--", ""
             
             try:
@@ -278,7 +281,6 @@ def fetch_asian_odds_with_selenium(qualified_results):
                 for tr in soup_a.find_all('tr'):
                     tds = [td.get_text(strip=True) for td in tr.find_all('td')]
                     if any(k in t for t in tds for k in PINNACLE_KEYWORDS):
-                        # 獲取平博公司 ID，用嚟查歷史終盤
                         tr_id = tr.get('id', '')
                         company_id = tr_id.replace('oddstr_', '') if 'oddstr_' in tr_id else ''
                         
@@ -288,7 +290,6 @@ def fetch_asian_odds_with_selenium(qualified_results):
                             init_h, init_l, init_a = data_tds[0], data_tds[1], data_tds[2]
                             live_h, live_l, live_a = data_tds[3], data_tds[4], data_tds[5]
                             
-                            # === 🛡️ 終盤鎖定系統 (開賽後避免取得走地數據) ===
                             current_time = datetime.now()
                             if current_time >= match_dt and company_id:
                                 try:
@@ -296,10 +297,8 @@ def fetch_asian_odds_with_selenium(qualified_results):
                                     hist_res = session.get(hist_url, timeout=5)
                                     hist_soup = BeautifulSoup(hist_res.content.decode('gbk', errors='ignore'), 'html.parser')
                                     
-                                    # 由新到舊逐行掃描歷史變動
                                     for h_tr in hist_soup.find_all('tr'):
                                         h_tds = [td.get_text(strip=True) for td in h_tr.find_all('td')]
-                                        # 確保係數據行，並嚴格排除包含「走」(走地) 嘅任何數據
                                         if len(h_tds) >= 4 and "主水" not in h_tds[0]:
                                             if any("走" in col for col in h_tds):
                                                 continue 
@@ -309,20 +308,17 @@ def fetch_asian_odds_with_selenium(qualified_results):
                                                 m_mon, m_day, m_hr, m_min = map(int, time_match.groups())
                                                 hist_dt = match_dt.replace(month=m_mon, day=m_day, hour=m_hr, minute=m_min)
                                                 
-                                                # 處理跨年問題
                                                 if m_mon == 12 and match_dt.month == 1:
                                                     hist_dt = hist_dt.replace(year=match_dt.year - 1)
                                                 elif m_mon == 1 and match_dt.month == 12:
                                                     hist_dt = hist_dt.replace(year=match_dt.year + 1)
                                                     
-                                                # 只要時間早過或等於開波時間，即為最後賽前終盤！
                                                 if hist_dt <= match_dt:
                                                     live_h, live_l, live_a = h_tds[0], h_tds[1], h_tds[2]
                                                     print(f"✅ 成功攔截 {match_id} 賽前終盤: {live_l}")
                                                     break
                                 except Exception as e:
                                     print(f"⚠️ 獲取歷史終盤出錯: {e}")
-                            # ===============================================
                             
                             init_l_num = parse_asian_handicap(init_l)
                             live_l_num = parse_asian_handicap(live_l)
