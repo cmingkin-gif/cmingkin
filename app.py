@@ -25,18 +25,13 @@ if hasattr(time, "tzset"):
 # === 認證資訊 ===
 TELEGRAM_TOKEN = os.environ.get("TG_TOKEN")
 CHAT_ID = os.environ.get("TG_CHAT_ID")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")  # 免費 GitHub Models 內置權限
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")  # 讀取 GH_PAT
 
 USE_TITAN_KELLY_MODE = True
 STATE_FILE = "recorded_state.json"
 recorded_matches = {}
 
-# 🎯 平博識別關鍵字
 PINNACLE_KEYWORDS = ('平博', 'Pinnacle', 'Pinna', '平*')
-
-CANDIDATE_MODELS = ["gemini-3.8-flash", "gemini-3.5-flash-lite"]
-WORKING_PROVIDER = None 
 
 GAME_ARRAY_RE = re.compile(r'game=Array\((.*?)\);', re.DOTALL)
 GAME_ITEM_RE = re.compile(r'"(.*?)"')
@@ -131,8 +126,10 @@ def parse_asian_handicap(handicap_str):
     return f"{sign}{val}" if val else handicap_str
 
 def get_ai_analysis(league, home, away, init_k, live_k, hits_str, asian_info):
-    global WORKING_PROVIDER
-    
+    if not GITHUB_TOKEN:
+        print("⚠️ 找不到 GITHUB_TOKEN，無法呼叫 AI。請確保已設定 GH_PAT。")
+        return ""
+
     prompt = f"""你是一個專業、冷靜且敏銳的足球盤口分析師。你的任務是透過莊家數據判斷真實意圖，找出是否有誘盤或避險動作。
 
 【賽事資訊】
@@ -148,83 +145,35 @@ def get_ai_analysis(league, home, away, init_k, live_k, hits_str, asian_info):
 🎯 綜合勝出預測：[主勝 / 客勝 / 和局]，信心度：[⭐ 到 ⭐⭐⭐⭐⭐]
 📝 莊家意圖：[一句話總結歐亞走勢是否一致，莊家是在真實避險還是故意誘盤]"""
 
-    # 通道一：Google Gemini
-    if GEMINI_API_KEY and WORKING_PROVIDER not in ("github", "free_fallback"):
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 180}
+    try:
+        # 使用官方最穩定嘅 Azure 終端節點
+        gh_url = "https://models.inference.ai.azure.com/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {GITHUB_TOKEN}",
+            "Content-Type": "application/json"
         }
-        models_to_try = [WORKING_PROVIDER] if (WORKING_PROVIDER and WORKING_PROVIDER.startswith("gemini")) else CANDIDATE_MODELS
-        for model_name in models_to_try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
-            try:
-                res = requests.post(url, json=payload, timeout=10)
-                if res.status_code == 200:
-                    data = res.json()
-                    analysis_text = data['candidates'][0]['content']['parts'][0]['text'].strip()
-                    WORKING_PROVIDER = model_name
-                    print(f"✅ 成功使用 Google 模型: {model_name}")
-                    return f"\n💡 【AI 盤口分析】\n{analysis_text}"
-                else:
-                    print(f"⚠️ Google 模型 '{model_name}' 無法使用 (狀態碼 {res.status_code})")
-            except Exception as e:
-                pass
-
-    # 通道二：GitHub Models (GPT-4o-mini) - 最穩定免費通道
-    if GITHUB_TOKEN and WORKING_PROVIDER != "free_fallback":
-        try:
-            gh_url = "https://models.github.ai/inference/chat/completions"
-            headers = {
-                "Authorization": f"Bearer {GITHUB_TOKEN}",
-                "Content-Type": "application/json"
-            }
-            gh_payload = {
-                "model": "gpt-4o-mini",
-                "messages": [
-                    {"role": "system", "content": "你是一個專業的足球盤口與凱利指數分析師，只使用繁體中文回答。"},
-                    {"role": "user", "content": prompt}
-                ],
-                "temperature": 0.3,
-                "max_tokens": 180
-            }
-            res = requests.post(gh_url, headers=headers, json=gh_payload, timeout=12)
-            if res.status_code == 200:
-                analysis_text = res.json()['choices'][0]['message']['content'].strip()
-                if WORKING_PROVIDER != "github":
-                    WORKING_PROVIDER = "github"
-                    print("✅ 成功切換至 GitHub 內置免費模型: GPT-4o-mini")
-                return f"\n💡 【AI 盤口分析】\n{analysis_text}"
-            else:
-                print(f"⚠️ GitHub Models 狀態碼 ({res.status_code})，切換至免 Key 通道...")
-        except Exception as e:
-            print(f"⚠️ GitHub Models 請求異常: {e}")
-
-    # 通道三：免 API Key 保底通道 (增加重試機制與延長等待)
-    for attempt in range(2):
-        try:
-            free_url = "https://text.pollinations.ai/openai"
-            free_payload = {
-                "model": "openai",
-                "messages": [
-                    {"role": "system", "content": "你是一個專業的足球盤口與凱利指數分析師，只使用繁體中文回答。"},
-                    {"role": "user", "content": prompt}
-                ],
-                "temperature": 0.3
-            }
-            res = requests.post(free_url, json=free_payload, timeout=25)
-            if res.status_code == 200:
-                analysis_text = res.json()['choices'][0]['message']['content'].strip()
-                if WORKING_PROVIDER != "free_fallback":
-                    WORKING_PROVIDER = "free_fallback"
-                    print("✅ 成功啟用 7x24 免 Key 免費 AI 分析通道！")
-                return f"\n💡 【AI 盤口分析】\n{analysis_text}"
-            else:
-                print(f"⚠️ 免 Key 通道返回狀態碼: {res.status_code}")
-        except Exception as e:
-            print(f"⚠️ 免 Key 通道請求出錯 (第 {attempt+1} 次): {e}")
-            time.sleep(2)
-
-    return ""
+        gh_payload = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "system", "content": "你是一個專業的足球盤口與凱利指數分析師，只使用繁體中文回答。"},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.3,
+            "max_tokens": 180
+        }
+        res = requests.post(gh_url, headers=headers, json=gh_payload, timeout=15)
+        
+        if res.status_code == 200:
+            analysis_text = res.json()['choices'][0]['message']['content'].strip()
+            print("✅ 成功呼叫 GitHub 官方免費 GPT-4o-mini 模型！")
+            return f"\n💡 【AI 盤口分析】\n{analysis_text}"
+        else:
+            print(f"⚠️ API 錯誤 ({res.status_code}): {res.text}")
+            return ""
+            
+    except Exception as e:
+        print(f"⚠️ 請求異常: {e}")
+        return ""
 
 def process_single_match(match_info):
     match_id = match_info['match_id']
