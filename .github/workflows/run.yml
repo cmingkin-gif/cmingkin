@@ -1,42 +1,36 @@
-name: Football Auto Scraper
+name: Pinna Scraper Auto Run
 
 on:
-  schedule:
-    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 jobs:
-  run-scraper:
+  scrape:
     runs-on: ubuntu-latest
-    
-    permissions:
-      contents: write
-
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install requests beautifulsoup4 selenium urllib3
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4 selenium urllib3
 
-    - name: Run scraper script
-      env:
-        TG_TOKEN: ${{ secrets.TG_TOKEN }}
-        TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-        GITHUB_TOKEN: ${{ secrets.GH_PAT }}  # 👈 已經改為使用高權限嘅 GH_PAT
-      run: python app.py
+      - name: Run Scraper
+        env:
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: python app.py
 
-    - name: Commit and push state file
-      run: |
-        git config --global user.name 'github-actions[bot]'
-        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-        git add recorded_state.json || echo "No state file to add"
-        git commit -m "Auto-update recorded state" || echo "No changes to commit"
-        git push || echo "No push needed"
+      - name: Commit state file back to repo
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add recorded_state.json
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update match state" && git pull --rebase origin main && git push)
