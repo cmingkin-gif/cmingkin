@@ -160,23 +160,21 @@ def get_ai_analysis(league, home, away, init_k, live_k, hits_str, asian_info):
         "max_tokens": 180
     }
 
-    # 🛡️ 加入 3 次網絡閃斷重試機制
+    # 🛡️ 網絡閃斷重試機制
     for attempt in range(3):
         try:
             res = requests.post(gh_url, headers=headers, json=gh_payload, timeout=20)
             if res.status_code == 200:
                 analysis_text = res.json()['choices'][0]['message']['content'].strip()
-                print("✅ 成功呼叫 GitHub 官方免費 GPT-4o-mini 模型！")
                 return f"\n💡 【AI 盤口分析】\n{analysis_text}"
             else:
-                print(f"⚠️ API 錯誤 ({res.status_code}): {res.text}")
                 return ""
-        except requests.exceptions.RequestException as e:
-            print(f"⚠️ 網絡連線異常 (第 {attempt+1} 次嘗試): {e}")
+        except requests.exceptions.RequestException:
             if attempt < 2:
-                time.sleep(4)  # 斷線後等 4 秒再試
+                time.sleep(4)
             else:
                 return ""
+    return ""
 
 def process_single_match(match_info):
     match_id = match_info['match_id']
@@ -281,8 +279,8 @@ def fetch_asian_odds_with_selenium(qualified_results):
                 for tr in soup_a.find_all('tr'):
                     tds = [td.get_text(strip=True) for td in tr.find_all('td')]
                     if any(k in t for t in tds for k in PINNACLE_KEYWORDS):
-                        tr_id = tr.get('id', '')
-                        company_id = tr_id.replace('oddstr_', '') if 'oddstr_' in tr_id else ''
+                        # 平博喺球探網嘅專屬 ID 固定為 8
+                        company_id = "8" 
                         
                         n_idx = next(i for i, v in enumerate(tds) if any(k in v for k in PINNACLE_KEYWORDS))
                         data_tds = [t for t in tds[n_idx+1:] if t not in ('', '+', '荐', '封', '走', '早')]
@@ -290,8 +288,10 @@ def fetch_asian_odds_with_selenium(qualified_results):
                             init_h, init_l, init_a = data_tds[0], data_tds[1], data_tds[2]
                             live_h, live_l, live_a = data_tds[3], data_tds[4], data_tds[5]
                             
+                            # === 🛡️ 終盤鎖定系統 (修復版) ===
                             current_time = datetime.now()
-                            if current_time >= match_dt and company_id:
+                            # 只要開賽時間已過，或者距離開賽不足 10 分鐘，強制檢查歷史盤口
+                            if current_time >= match_dt or (match_dt - current_time).total_seconds() < 600:
                                 try:
                                     hist_url = f"https://vip.titan007.com/changeDetail/asian.aspx?id={match_id}&companyid={company_id}"
                                     hist_res = session.get(hist_url, timeout=5)
@@ -299,26 +299,34 @@ def fetch_asian_odds_with_selenium(qualified_results):
                                     
                                     for h_tr in hist_soup.find_all('tr'):
                                         h_tds = [td.get_text(strip=True) for td in h_tr.find_all('td')]
+                                        # 確保係有效數據行，並排除表頭
                                         if len(h_tds) >= 4 and "主水" not in h_tds[0]:
-                                            if any("走" in col for col in h_tds):
+                                            # 嚴格過濾：有「走」字或「中場」一律無視
+                                            if any("走" in col for col in h_tds) or "中場" in h_tds[3]:
                                                 continue 
                                                 
-                                            time_match = re.search(r'(\d+)-(\d+)\s+(\d+):(\d+)', h_tds[3])
+                                            time_str = h_tds[3]
+                                            time_match = re.search(r'(?:(\d+)-(\d+)\s+)?(\d+):(\d+)', time_str)
                                             if time_match:
-                                                m_mon, m_day, m_hr, m_min = map(int, time_match.groups())
-                                                hist_dt = match_dt.replace(month=m_mon, day=m_day, hour=m_hr, minute=m_min)
-                                                
-                                                if m_mon == 12 and match_dt.month == 1:
-                                                    hist_dt = hist_dt.replace(year=match_dt.year - 1)
-                                                elif m_mon == 1 and match_dt.month == 12:
-                                                    hist_dt = hist_dt.replace(year=match_dt.year + 1)
-                                                    
+                                                m_mon, m_day, m_hr, m_min = time_match.groups()
+                                                hist_dt = match_dt.replace(hour=int(m_hr), minute=int(m_min))
+                                                if m_mon and m_day:
+                                                    hist_dt = hist_dt.replace(month=int(m_mon), day=int(m_day))
+                                                    # 處理跨年問題
+                                                    if int(m_mon) == 12 and match_dt.month == 1:
+                                                        hist_dt = hist_dt.replace(year=match_dt.year - 1)
+                                                        
+                                                # 由最新數落去，第一筆早過開波時間嘅，就係真·終盤！
                                                 if hist_dt <= match_dt:
                                                     live_h, live_l, live_a = h_tds[0], h_tds[1], h_tds[2]
-                                                    print(f"✅ 成功攔截 {match_id} 賽前終盤: {live_l}")
                                                     break
+                                            else:
+                                                # 解析唔到時間但肯定冇「走」字，直接當終盤
+                                                live_h, live_l, live_a = h_tds[0], h_tds[1], h_tds[2]
+                                                break
                                 except Exception as e:
                                     print(f"⚠️ 獲取歷史終盤出錯: {e}")
+                            # ===============================================
                             
                             init_l_num = parse_asian_handicap(init_l)
                             live_l_num = parse_asian_handicap(live_l)
