@@ -67,12 +67,12 @@ def create_robust_session():
     })
     retry_strategy = Retry(
         total=2,
-        backoff_factor=0.3,
+        backoff_factor=0.2,
         status_forcelist=[429, 500, 502, 503, 504],
         allowed_methods=["GET"],
     )
     adapter = HTTPAdapter(
-        pool_connections=50, pool_maxsize=50, max_retries=retry_strategy
+        pool_connections=60, pool_maxsize=60, max_retries=retry_strategy
     )
     s.mount("https://", adapter)
     s.mount("http://", adapter)
@@ -80,6 +80,33 @@ def create_robust_session():
 
 
 session = create_robust_session()
+
+
+def create_fast_chrome_options():
+    options = Options()
+    options.page_load_strategy = "eager"
+    options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    # ⚡ 禁用圖片、CSS 與字型載入，大幅加快網頁渲染速度
+    options.add_argument("--blink-settings=imagesEnabled=false")
+    options.add_experimental_option(
+        "prefs",
+        {
+            "profile.managed_default_content_settings.images": 2,
+            "profile.managed_default_content_settings.stylesheets": 2,
+            "profile.managed_default_content_settings.fonts": 2,
+        },
+    )
+    options.add_argument(
+        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+        " AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0"
+        " Safari/537.36"
+    )
+    return options
 
 
 def load_state():
@@ -125,12 +152,12 @@ def send_telegram_message(text):
         for _ in range(2):
             try:
                 if (
-                    requests.post(url, json=payload, timeout=10).status_code
+                    session.post(url, json=payload, timeout=10).status_code
                     == 200
                 ):
                     break
             except Exception:
-                time.sleep(1)
+                time.sleep(0.5)
 
 
 def cleanup_old_records(current_time):
@@ -209,8 +236,7 @@ def process_single_match(match_info):
         f"https://1x2d.titan007.com/{match_id}.js?t={int(time.time()*1000)}"
     )
     try:
-        # 放寬 Timeout 至 (5.0, 8.0) 秒，避免併發時個別賽事超時被靜音跳過
-        res = session.get(odds_url, timeout=(5.0, 8.0))
+        res = session.get(odds_url, timeout=(4.0, 6.5))
         if res.status_code != 200:
             return None
         res.encoding = "utf-8"
@@ -324,267 +350,254 @@ def process_single_match(match_info):
         return None
 
 
-def fetch_asian_odds_with_selenium(qualified_results):
+def extract_pinnacle_asian_from_html(html_text, match_id, match_dt):
+    """從亞盤 HTML 提取平博初盤與終盤（支援 requests 與 Selenium 共用）"""
+    soup_a = BeautifulSoup(html_text, "html.parser")
+    for tr in soup_a.find_all("tr"):
+        tds = [td.get_text(strip=True) for td in tr.find_all("td")]
+        if any(k in t for t in tds for k in PINNACLE_KEYWORDS):
+            tr_id = tr.get("id", "")
+            company_id = (
+                tr_id.replace("oddstr_", "") if "oddstr_" in tr_id else ""
+            )
+            if not company_id:
+                c_match = re.search(r"companyid=(\d+)", str(tr), re.IGNORECASE)
+                company_id = c_match.group(1) if c_match else "42"
+
+            n_idx = next(
+                i
+                for i, v in enumerate(tds)
+                if any(k in v for k in PINNACLE_KEYWORDS)
+            )
+            data_tds = [
+                t
+                for t in tds[n_idx + 1 :]
+                if t not in ("", "+", "荐", "封", "走", "早")
+            ]
+            if len(data_tds) >= 6:
+                init_h, init_l, init_a = data_tds[0], data_tds[1], data_tds[2]
+                live_h, live_l, live_a = data_tds[3], data_tds[4], data_tds[5]
+
+                init_l_num = parse_asian_handicap(init_l)
+                live_l_num = parse_asian_handicap(live_l)
+                found_closing = False
+
+                # === 🛡️ 終盤鎖定系統 (完美過濾走地) ===
+                current_time = datetime.now()
+                if (
+                    current_time >= match_dt
+                    or (match_dt - current_time).total_seconds() < 600
+                ):
+                    try:
+                        hist_url = f"https://vip.titan007.com/changeDetail/asian.aspx?id={match_id}&companyid={company_id}"
+                        hist_res = session.get(hist_url, timeout=4)
+                        hist_soup = BeautifulSoup(
+                            hist_res.content.decode("gbk", errors="ignore"),
+                            "html.parser",
+                        )
+
+                        for h_tr in hist_soup.find_all("tr"):
+                            h_tds = [
+                                td.get_text(strip=True)
+                                for td in h_tr.find_all("td")
+                            ]
+                            if len(h_tds) >= 4 and "主水" not in h_tds[0]:
+                                if (
+                                    any("走" in col for col in h_tds)
+                                    or "中場" in h_tds[3]
+                                    or "中场" in h_tds[3]
+                                ):
+                                    continue
+
+                                time_str = h_tds[3]
+                                time_match = re.search(
+                                    r"(?:(\d+)[-/](\d+)\s*)?(\d+)[:：](\d+)",
+                                    time_str,
+                                )
+                                if time_match:
+                                    m_mon, m_day, m_hr, m_min = (
+                                        time_match.groups()
+                                    )
+                                    hist_dt = match_dt.replace(
+                                        hour=int(m_hr),
+                                        minute=int(m_min),
+                                        second=0,
+                                        microsecond=0,
+                                    )
+                                    if m_mon and m_day:
+                                        hist_dt = hist_dt.replace(
+                                            month=int(m_mon), day=int(m_day)
+                                        )
+                                        if (
+                                            int(m_mon) == 12
+                                            and match_dt.month == 1
+                                        ):
+                                            hist_dt = hist_dt.replace(
+                                                year=match_dt.year - 1
+                                            )
+
+                                    if hist_dt <= match_dt + timedelta(
+                                        minutes=2
+                                    ):
+                                        live_h, live_l, live_a = (
+                                            h_tds[0],
+                                            h_tds[1],
+                                            h_tds[2],
+                                        )
+                                        live_l_num = parse_asian_handicap(
+                                            live_l
+                                        )
+                                        found_closing = True
+                                        break
+                                else:
+                                    live_h, live_l, live_a = (
+                                        h_tds[0],
+                                        h_tds[1],
+                                        h_tds[2],
+                                    )
+                                    live_l_num = parse_asian_handicap(live_l)
+                                    found_closing = True
+                                    break
+                    except Exception as e:
+                        print(f"⚠️ 獲取歷史終盤出錯: {e}")
+
+                    if not found_closing:
+                        live_h, live_l_num, live_a = "未知", "未知", "未知"
+                        live_l = "未知"
+                # ===============================================
+
+                asian_str = f"初[{init_h}/{init_l_num}/{init_a}] ➔ 終[{live_h}/{live_l_num}/{live_a}]"
+                asian_line_change = (
+                    f"(盤變: {init_l_num} ➔ {live_l_num})"
+                    if init_l_num != live_l_num and live_l_num != "未知"
+                    else ""
+                )
+                return asian_str, asian_line_change
+    return "--", ""
+
+
+def fast_fetch_single_asian_odds(r):
+    """第一階段：使用高速 requests 併發抓取亞盤"""
+    match_id = r["match_id"]
+    match_dt = r["info"]["match_dt"]
+    url = f"https://vip.titan007.com/AsianOdds_n.aspx?id={match_id}&l=0"
+    try:
+        res = session.get(url, timeout=(3.5, 5.0))
+        if res.status_code == 200:
+            html_text = res.content.decode("utf-8", errors="ignore")
+            if not any(k in html_text for k in PINNACLE_KEYWORDS):
+                html_text = res.content.decode("gbk", errors="ignore")
+            asian_str, asian_line_change = extract_pinnacle_asian_from_html(
+                html_text, match_id, match_dt
+            )
+            if asian_str != "--":
+                r["asian_str"] = asian_str
+                r["asian_line_change"] = asian_line_change
+                return True
+    except Exception:
+        pass
+    r["asian_str"] = "--"
+    r["asian_line_change"] = ""
+    return False
+
+
+def fetch_asian_odds_fast(qualified_results, shared_driver=None):
+    """高速雙引擎抓取亞盤：先用 requests 多線程秒抓，失敗或需動態渲染嘅場次先用 Selenium 補抓"""
     if not qualified_results:
         return
 
-    options = Options()
-    options.page_load_strategy = "eager"
-    options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument(
-        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-        " AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0"
-        " Safari/537.36"
-    )
+    # ⚡ 第一階段：多線程極速 requests 抓取（1 秒內完成絕大部分賽事）
+    fallback_list = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+        future_to_r = {
+            executor.submit(fast_fetch_single_asian_odds, r): r
+            for r in qualified_results
+        }
+        for future in concurrent.futures.as_completed(future_to_r):
+            r = future_to_r[future]
+            try:
+                success = future.result()
+                if not success:
+                    fallback_list.append(r)
+            except Exception:
+                fallback_list.append(r)
 
-    driver = None
+    if not fallback_list:
+        return
+
+    # ⚡ 第二階段：只針對 requests 攞唔到數據嘅賽事使用 Selenium 補抓（重用已有嘅 Chrome 實例）
+    own_driver = False
+    driver = shared_driver
     try:
-        driver = webdriver.Chrome(options=options)
-        driver.set_page_load_timeout(20)
+        if driver is None:
+            driver = webdriver.Chrome(options=create_fast_chrome_options())
+            driver.set_page_load_timeout(15)
+            own_driver = True
 
-        for r in qualified_results:
+        for r in fallback_list:
             match_id = r["match_id"]
             match_dt = r["info"]["match_dt"]
-            asian_str, asian_line_change = "--", ""
-
             try:
                 driver.get(
                     f"https://vip.titan007.com/AsianOdds_n.aspx?id={match_id}&l=0"
                 )
-                # 明確等待亞盤賠率數據行 (id 以 oddstr_ 開頭) 載入完成，並留 1.5 秒緩衝
-                WebDriverWait(driver, 10).until(
+                # 精準等待亞盤數據行出現即刻解析，移除無謂死等
+                WebDriverWait(driver, 6).until(
                     EC.presence_of_element_located(
                         (By.XPATH, "//tr[starts-with(@id, 'oddstr_')]")
                     )
                 )
-                time.sleep(1.5)
-
-                soup_a = BeautifulSoup(driver.page_source, "html.parser")
-                for tr in soup_a.find_all("tr"):
-                    tds = [td.get_text(strip=True) for td in tr.find_all("td")]
-                    if any(k in t for t in tds for k in PINNACLE_KEYWORDS):
-                        # 動態抽取公司 ID
-                        tr_id = tr.get("id", "")
-                        company_id = (
-                            tr_id.replace("oddstr_", "")
-                            if "oddstr_" in tr_id
-                            else ""
-                        )
-                        if not company_id:
-                            c_match = re.search(
-                                r"companyid=(\d+)", str(tr), re.IGNORECASE
-                            )
-                            company_id = c_match.group(1) if c_match else "42"
-
-                        n_idx = next(
-                            i
-                            for i, v in enumerate(tds)
-                            if any(k in v for k in PINNACLE_KEYWORDS)
-                        )
-                        data_tds = [
-                            t
-                            for t in tds[n_idx + 1 :]
-                            if t not in ("", "+", "荐", "封", "走", "早")
-                        ]
-                        if len(data_tds) >= 6:
-                            init_h, init_l, init_a = (
-                                data_tds[0],
-                                data_tds[1],
-                                data_tds[2],
-                            )
-                            live_h, live_l, live_a = (
-                                data_tds[3],
-                                data_tds[4],
-                                data_tds[5],
-                            )
-
-                            # 預先初始化盤口變數，避免開賽前 >10 分鐘時發生 UnboundLocalError
-                            init_l_num = parse_asian_handicap(init_l)
-                            live_l_num = parse_asian_handicap(live_l)
-                            found_closing = False
-
-                            # === 🛡️ 終盤鎖定系統 (完美過濾走地) ===
-                            current_time = datetime.now()
-                            # 只要開賽時間已過，或者距離開賽不足 10 分鐘，強制檢查歷史盤口
-                            if (
-                                current_time >= match_dt
-                                or (match_dt - current_time).total_seconds()
-                                < 600
-                            ):
-                                try:
-                                    hist_url = f"https://vip.titan007.com/changeDetail/asian.aspx?id={match_id}&companyid={company_id}"
-                                    hist_res = session.get(hist_url, timeout=5)
-                                    hist_soup = BeautifulSoup(
-                                        hist_res.content.decode(
-                                            "gbk", errors="ignore"
-                                        ),
-                                        "html.parser",
-                                    )
-
-                                    for h_tr in hist_soup.find_all("tr"):
-                                        h_tds = [
-                                            td.get_text(strip=True)
-                                            for td in h_tr.find_all("td")
-                                        ]
-                                        # 確保係有效數據行，並排除表頭
-                                        if (
-                                            len(h_tds) >= 4
-                                            and "主水" not in h_tds[0]
-                                        ):
-                                            # 嚴格過濾：有「走」字或「中場/中场」一律無視
-                                            if (
-                                                any("走" in col for col in h_tds)
-                                                or "中場" in h_tds[3]
-                                                or "中场" in h_tds[3]
-                                            ):
-                                                continue
-
-                                            time_str = h_tds[3]
-                                            time_match = re.search(
-                                                r"(?:(\d+)[-/](\d+)\s*)?(\d+)[:：](\d+)",
-                                                time_str,
-                                            )
-                                            if time_match:
-                                                m_mon, m_day, m_hr, m_min = (
-                                                    time_match.groups()
-                                                )
-                                                hist_dt = match_dt.replace(
-                                                    hour=int(m_hr),
-                                                    minute=int(m_min),
-                                                    second=0,
-                                                    microsecond=0,
-                                                )
-                                                if m_mon and m_day:
-                                                    hist_dt = hist_dt.replace(
-                                                        month=int(m_mon),
-                                                        day=int(m_day),
-                                                    )
-                                                    # 處理跨年問題
-                                                    if (
-                                                        int(m_mon) == 12
-                                                        and match_dt.month == 1
-                                                    ):
-                                                        hist_dt = (
-                                                            hist_dt.replace(
-                                                                year=match_dt.year
-                                                                - 1
-                                                            )
-                                                        )
-
-                                                # 由最新數落去，只要時間 <= 開波時間 + 2分鐘，就係真·賽前終盤
-                                                if hist_dt <= match_dt + timedelta(
-                                                    minutes=2
-                                                ):
-                                                    live_h, live_l, live_a = (
-                                                        h_tds[0],
-                                                        h_tds[1],
-                                                        h_tds[2],
-                                                    )
-                                                    live_l_num = (
-                                                        parse_asian_handicap(
-                                                            live_l
-                                                        )
-                                                    )
-                                                    found_closing = True
-                                                    break
-                                            else:
-                                                # 解析唔到時間但肯定冇「走」字，直接當終盤
-                                                live_h, live_l, live_a = (
-                                                    h_tds[0],
-                                                    h_tds[1],
-                                                    h_tds[2],
-                                                )
-                                                live_l_num = (
-                                                    parse_asian_handicap(live_l)
-                                                )
-                                                found_closing = True
-                                                break
-                                except Exception as e:
-                                    print(f"⚠️ 獲取歷史終盤出錯: {e}")
-
-                                # 終極防禦：如果連賽前歷史數據都搵唔到，寧願顯示未知，都唔出錯嘅走地盤
-                                if not found_closing:
-                                    live_h, live_l_num, live_a = (
-                                        "未知",
-                                        "未知",
-                                        "未知",
-                                    )
-                                    live_l = "未知"
-                            # ===============================================
-
-                            asian_str = f"初[{init_h}/{init_l_num}/{init_a}] ➔ 終[{live_h}/{live_l_num}/{live_a}]"
-                            # 只有數值有效時先計算盤變
-                            asian_line_change = (
-                                f"(盤變: {init_l_num} ➔ {live_l_num})"
-                                if init_l_num != live_l_num
-                                and live_l_num != "未知"
-                                else ""
-                            )
-                            break
+                asian_str, asian_line_change = extract_pinnacle_asian_from_html(
+                    driver.page_source, match_id, match_dt
+                )
+                r["asian_str"] = asian_str
+                r["asian_line_change"] = asian_line_change
             except Exception:
                 pass
-
-            r["asian_str"] = asian_str
-            r["asian_line_change"] = asian_line_change
-
     finally:
-        if driver:
+        if own_driver and driver:
             try:
                 driver.quit()
             except Exception:
                 pass
 
 
-def fetch_main_page_html():
-    options = Options()
-    options.page_load_strategy = "eager"
-    options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument(
-        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-        " AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0"
-        " Safari/537.36"
-    )
-
+def fetch_main_page_html_and_driver():
+    """啟動一次高速版 Chrome 抓取首頁並保留實例供後續後備使用"""
+    options = create_fast_chrome_options()
     for attempt in range(1, 4):
         driver = None
         try:
             driver = webdriver.Chrome(options=options)
-            driver.set_page_load_timeout(20)
+            driver.set_page_load_timeout(15)
             driver.get("https://live.titan007.com/indexall_big.aspx")
-            WebDriverWait(driver, 10).until(
+            WebDriverWait(driver, 8).until(
                 EC.presence_of_element_located(
                     (By.XPATH, "//tr[starts-with(@id, 'tr1_')]")
                 )
             )
-            time.sleep(1.5)  # 確保所有賽事行與狀態都已完整渲染
+            time.sleep(
+                0.6
+            )  # 禁用圖片後渲染極快，0.6 秒已足夠所有賽事列載入
             html = driver.page_source
             if html and "tr1_" in html:
-                return html
+                return html, driver
+            driver.quit()
         except Exception:
-            pass
-        finally:
             if driver:
                 try:
                     driver.quit()
                 except Exception:
                     pass
-        time.sleep(2)
-    return ""
+        time.sleep(1)
+    return "", None
 
 
 def run_scraper_once():
     current_scan_time = datetime.now()
     cleanup_old_records(current_scan_time)
 
-    page_html = fetch_main_page_html()
+    page_html, shared_driver = fetch_main_page_html_and_driver()
     if not page_html:
         return
 
@@ -605,17 +618,7 @@ def run_scraper_once():
             if any(k in status_text for k in FINISHED_KEYWORDS):
                 continue
 
-            home = (
-                tr.find(id=f"team1_{match_id}").text.strip()
-                if tr.find(id=f"team1_{match_id}")
-                else ""
-            )
-            away = (
-                tr.find(id=f"team2_{match_id}").text.strip()
-                if tr.find(id=f"team2_{match_id}")
-                else ""
-            )
-
+            # ⚡ 先檢查開賽時間，過期賽事直接跳過，慳返解析主客隊名嘅時間
             raw_match_time = (
                 tr.find(id=f"mt_{match_id}").text.strip()
                 if tr.find(id=f"mt_{match_id}")
@@ -638,6 +641,17 @@ def run_scraper_once():
             if match_dt + timedelta(minutes=115) < current_scan_time:
                 continue
 
+            home = (
+                tr.find(id=f"team1_{match_id}").text.strip()
+                if tr.find(id=f"team1_{match_id}")
+                else ""
+            )
+            away = (
+                tr.find(id=f"team2_{match_id}").text.strip()
+                if tr.find(id=f"team2_{match_id}")
+                else ""
+            )
+
             match_infos.append({
                 "match_id": match_id,
                 "league": tds[1].text.strip() if len(tds) > 1 else "",
@@ -648,15 +662,15 @@ def run_scraper_once():
             })
 
         results = []
-        # 將 max_workers 設為 30，避免瞬間 100 併發導致個別請求超時被丟棄
-        with concurrent.futures.ThreadPoolExecutor(max_workers=30) as executor:
+        # ⚡ 提升至 60 併發線程（配合 60 連線池），兼顧極速與穩定
+        with concurrent.futures.ThreadPoolExecutor(max_workers=60) as executor:
             future_to_match = {
                 executor.submit(process_single_match, info): info
                 for info in match_infos
             }
             try:
                 for future in concurrent.futures.as_completed(
-                    future_to_match, timeout=60
+                    future_to_match, timeout=40
                 ):
                     try:
                         res = future.result()
@@ -668,7 +682,7 @@ def run_scraper_once():
                 print("⚠️ 部分賽事抓取超時，使用已完成嘅結果繼續執行")
 
         qualified_results = [r for r in results if r["is_qualifying"]]
-        fetch_asian_odds_with_selenium(qualified_results)
+        fetch_asian_odds_fast(qualified_results, shared_driver=shared_driver)
 
         valid_alerts = []
         for r in results:
@@ -738,6 +752,12 @@ def run_scraper_once():
 
     except Exception as e:
         print(f"Error: {e}")
+    finally:
+        if shared_driver:
+            try:
+                shared_driver.quit()
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
