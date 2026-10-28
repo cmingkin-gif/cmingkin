@@ -72,7 +72,7 @@ def create_robust_session():
         allowed_methods=["GET"],
     )
     adapter = HTTPAdapter(
-        pool_connections=100, pool_maxsize=100, max_retries=retry_strategy
+        pool_connections=50, pool_maxsize=50, max_retries=retry_strategy
     )
     s.mount("https://", adapter)
     s.mount("http://", adapter)
@@ -209,7 +209,8 @@ def process_single_match(match_info):
         f"https://1x2d.titan007.com/{match_id}.js?t={int(time.time()*1000)}"
     )
     try:
-        res = session.get(odds_url, timeout=(3.5, 4.5))
+        # 放寬 Timeout 至 (5.0, 8.0) 秒，避免併發時個別賽事超時被靜音跳過
+        res = session.get(odds_url, timeout=(5.0, 8.0))
         if res.status_code != 200:
             return None
         res.encoding = "utf-8"
@@ -354,11 +355,13 @@ def fetch_asian_odds_with_selenium(qualified_results):
                 driver.get(
                     f"https://vip.titan007.com/AsianOdds_n.aspx?id={match_id}&l=0"
                 )
-                # 動態等待表格載入，取代死等 3 秒
-                WebDriverWait(driver, 8).until(
-                    EC.presence_of_element_located((By.TAG_NAME, "tr"))
+                # 明確等待亞盤賠率數據行 (id 以 oddstr_ 開頭) 載入完成，並留 1.5 秒緩衝
+                WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located(
+                        (By.XPATH, "//tr[starts-with(@id, 'oddstr_')]")
+                    )
                 )
-                time.sleep(0.8)
+                time.sleep(1.5)
 
                 soup_a = BeautifulSoup(driver.page_source, "html.parser")
                 for tr in soup_a.find_all("tr"):
@@ -561,6 +564,7 @@ def fetch_main_page_html():
                     (By.XPATH, "//tr[starts-with(@id, 'tr1_')]")
                 )
             )
+            time.sleep(1.5)  # 確保所有賽事行與狀態都已完整渲染
             html = driver.page_source
             if html and "tr1_" in html:
                 return html
@@ -644,14 +648,15 @@ def run_scraper_once():
             })
 
         results = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
+        # 將 max_workers 設為 30，避免瞬間 100 併發導致個別請求超時被丟棄
+        with concurrent.futures.ThreadPoolExecutor(max_workers=30) as executor:
             future_to_match = {
                 executor.submit(process_single_match, info): info
                 for info in match_infos
             }
             try:
                 for future in concurrent.futures.as_completed(
-                    future_to_match, timeout=45
+                    future_to_match, timeout=60
                 ):
                     try:
                         res = future.result()
