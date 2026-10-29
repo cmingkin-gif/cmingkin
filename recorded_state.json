@@ -74,11 +74,6 @@
     "live_str": "0.93/1.00/1.02",
     "updated_at": "2026-10-28T23:30:32.128571"
   },
-  "3009393": {
-    "state": "unqualifying",
-    "live_str": "0.82/1.02/0.96",
-    "updated_at": "2026-10-28T21:00:40.737876"
-  },
   "3097262": {
     "state": "unqualifying",
     "live_str": "0.94/0.90/0.98",
@@ -99,11 +94,6 @@
     "live_str": "0.93/1.07/0.88",
     "updated_at": "2026-10-28T22:45:31.789831"
   },
-  "3106073": {
-    "state": "unqualifying",
-    "live_str": "0.68/1.38/1.94",
-    "updated_at": "2026-10-28T21:00:40.737876"
-  },
   "3107705": {
     "state": "qualifying",
     "live_str": "1.01/0.80/0.79",
@@ -113,11 +103,6 @@
     "state": "unqualifying",
     "live_str": "0.95/0.90/0.91",
     "updated_at": "2026-10-29T05:15:27.905072"
-  },
-  "3010078": {
-    "state": "unqualifying",
-    "live_str": "0.94/0.92/0.92",
-    "updated_at": "2026-10-28T20:45:32.155551"
   },
   "3107701": {
     "state": "qualifying",
@@ -292,7 +277,7 @@
   "3092273": {
     "state": "qualifying",
     "live_str": "0.87/0.89/0.94",
-    "updated_at": "2026-10-29T20:45:30.286292"
+    "updated_at": "2026-10-29T21:00:42.853455"
   },
   "3106095": {
     "state": "unqualifying",
@@ -306,13 +291,13 @@
   },
   "3105546": {
     "state": "qualifying",
-    "live_str": "0.92/0.83/0.86",
-    "updated_at": "2026-10-29T20:45:30.286292"
+    "live_str": "0.91/0.84/0.86",
+    "updated_at": "2026-10-29T21:00:42.853455"
   },
   "3105551": {
-    "state": "unqualifying",
+    "state": "qualifying",
     "live_str": "0.94/0.83/0.90",
-    "updated_at": "2026-10-29T20:30:36.666510"
+    "updated_at": "2026-10-29T21:00:42.853455"
   },
   "3017206": {
     "state": "unqualifying",
@@ -383,5 +368,10 @@
     "state": "unqualifying",
     "live_str": "0.89/1.03/1.16",
     "updated_at": "2026-10-29T20:30:36.666510"
+  },
+  "3013041": {
+    "state": "qualifying",
+    "live_str": "0.86/1.05/1.15",
+    "updated_at": "2026-10-29T21:00:42.853455"
   }
 }
