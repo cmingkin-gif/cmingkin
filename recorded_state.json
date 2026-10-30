@@ -440,14 +440,14 @@
     "updated_at": "2026-10-31T06:00:37.320856"
   },
   "3042587": {
-    "state": "qualifying",
-    "live_str": "0.88/1.05/1.11",
-    "updated_at": "2026-10-31T07:30:35.237374"
+    "state": "unqualifying",
+    "live_str": "0.92/1.00/1.01",
+    "updated_at": "2026-10-31T07:45:28.394786"
   },
   "2962720": {
     "state": "qualifying",
     "live_str": "1.01/0.91/0.89",
-    "updated_at": "2026-10-31T07:30:35.237374"
+    "updated_at": "2026-10-31T07:45:28.394786"
   },
   "3107359": {
     "state": "unqualifying",
