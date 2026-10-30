@@ -202,7 +202,7 @@
   "3039008": {
     "state": "qualifying",
     "live_str": "0.80/0.88/1.08",
-    "updated_at": "2026-10-31T02:00:47.411019"
+    "updated_at": "2026-10-31T02:15:27.941656"
   },
   "3069780": {
     "state": "unqualifying",
@@ -251,8 +251,8 @@
   },
   "3069779": {
     "state": "qualifying",
-    "live_str": "0.84/0.97/1.05",
-    "updated_at": "2026-10-31T02:00:47.411019"
+    "live_str": "0.85/0.96/1.03",
+    "updated_at": "2026-10-31T02:15:27.941656"
   },
   "3001875": {
     "state": "unqualifying",
@@ -285,9 +285,9 @@
     "updated_at": "2026-10-30T19:30:36.262231"
   },
   "3108090": {
-    "state": "qualifying",
-    "live_str": "0.84/0.88/0.91",
-    "updated_at": "2026-10-31T02:00:47.411019"
+    "state": "unqualifying",
+    "live_str": "0.85/0.88/0.91",
+    "updated_at": "2026-10-31T02:15:27.941656"
   },
   "3098413": {
     "state": "qualifying",
@@ -302,7 +302,7 @@
   "3059488": {
     "state": "qualifying",
     "live_str": "0.95/0.90/0.93",
-    "updated_at": "2026-10-31T02:00:47.411019"
+    "updated_at": "2026-10-31T02:15:27.941656"
   },
   "3100530": {
     "state": "qualifying",
@@ -317,7 +317,7 @@
   "3107539": {
     "state": "qualifying",
     "live_str": "0.95/0.95/0.88",
-    "updated_at": "2026-10-31T02:00:47.411019"
+    "updated_at": "2026-10-31T02:15:27.941656"
   },
   "3106931": {
     "state": "qualifying",
@@ -387,7 +387,7 @@
   "3040156": {
     "state": "qualifying",
     "live_str": "0.90/0.87/0.80",
-    "updated_at": "2026-10-31T02:00:47.411019"
+    "updated_at": "2026-10-31T02:15:27.941656"
   },
   "3052968": {
     "state": "unqualifying",
@@ -407,7 +407,7 @@
   "3019174": {
     "state": "qualifying",
     "live_str": "1.06/0.98/0.91",
-    "updated_at": "2026-10-31T02:00:47.411019"
+    "updated_at": "2026-10-31T02:15:27.941656"
   },
   "2912923": {
     "state": "unqualifying",
@@ -425,13 +425,13 @@
     "updated_at": "2026-10-31T02:00:47.411019"
   },
   "2997766": {
-    "state": "qualifying",
-    "live_str": "0.92/1.01/0.99",
-    "updated_at": "2026-10-31T02:00:47.411019"
+    "state": "unqualifying",
+    "live_str": "0.97/0.96/0.96",
+    "updated_at": "2026-10-31T02:15:27.941656"
   },
   "3106606": {
-    "state": "qualifying",
-    "live_str": "1.09/0.93/0.83",
-    "updated_at": "2026-10-31T02:00:47.411019"
+    "state": "unqualifying",
+    "live_str": "1.02/0.92/0.86",
+    "updated_at": "2026-10-31T02:15:27.941656"
   }
 }
