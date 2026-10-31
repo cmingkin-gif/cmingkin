@@ -41,7 +41,10 @@ def load_state():
             recorded_matches[m_id] = {
                 "state": data.get("state"),
                 "live_str": data.get("live_str", "未知"),
-                "updated_at": datetime.fromisoformat(data["updated_at"])
+                "updated_at": datetime.fromisoformat(data["updated_at"]),
+                "league": data.get("league", "未知聯賽"),
+                "home": data.get("home", "主隊"),
+                "away": data.get("away", "客隊")
             }
     except Exception:
         pass
@@ -52,7 +55,10 @@ def save_state():
             m_id: {
                 "state": data["state"],
                 "live_str": data["live_str"],
-                "updated_at": data["updated_at"].isoformat()
+                "updated_at": data["updated_at"].isoformat(),
+                "league": data.get("league", ""),
+                "home": data.get("home", ""),
+                "away": data.get("away", "")
             }
             for m_id, data in recorded_matches.items()
         }
@@ -78,12 +84,12 @@ def fetch_match_odds(match_id):
     try:
         odds_url = f"https://1x2d.titan007.com/{match_id}.js?t={int(time.time()*1000)}"
         res = requests.get(odds_url, headers={"Referer": "https://live.titan007.com/"}, timeout=5)
-        if res.status_code != 200: return "未知", "--"
+        if res.status_code != 200: return "未知", "未知", "--"
         res.encoding = 'utf-8'
         js_text = res.text
         
         game_data_match = GAME_ARRAY_RE.search(js_text)
-        if not game_data_match: return "未知", "--"
+        if not game_data_match: return "未知", "未知", "--"
         games = GAME_ITEM_RE.findall(game_data_match.group(1))
         
         pinna_row = None
@@ -111,7 +117,7 @@ def fetch_match_odds(match_id):
                     live_count += 1
             except Exception: continue
                 
-        if not pinna_row or init_count == 0 or live_count == 0: return "未知", "--"
+        if not pinna_row or init_count == 0 or live_count == 0: return "未知", "未知", "--"
         
         pInitH, pInitD, pInitA = float(pinna_row[3]), float(pinna_row[4]), float(pinna_row[5])
         pLiveH, pLiveD, pLiveA = float(pinna_row[10] or pInitH), float(pinna_row[11] or pInitD), float(pinna_row[12] or pInitA)
@@ -132,13 +138,22 @@ def fetch_match_odds(match_id):
         if kInitA == minInitK and kLiveA < kInitA and pLiveA < pInitA: hits.append(f"客({kInitA:.2f}➔{kLiveA:.2f})")
             
         initStr = f"{kInitH:.2f}/{kInitD:.2f}/{kInitA:.2f}"
+        liveStr = f"{kLiveH:.2f}/{kLiveD:.2f}/{kLiveA:.2f}"
         hits_str = " ".join(hits) if hits else "--"
         
-        return initStr, hits_str
+        return initStr, liveStr, hits_str
     except Exception:
-        return "未知", "--"
+        return "未知", "未知", "--"
 
-def fetch_main_page_html():
+def check_results():
+    print(f"\n🔍 [完場比分結算器] 啟動時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    load_state()
+    
+    pending_matches = {m: d for m, d in recorded_matches.items() if d['state'] == 'qualifying'}
+    if not pending_matches: 
+        print("👀 目前沒有等待結算的賽事。")
+        return
+        
     options = Options()
     options.page_load_strategy = 'eager'
     options.add_argument("--headless=new")
@@ -148,78 +163,24 @@ def fetch_main_page_html():
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
     
-    for attempt in range(1, 4):
-        driver = None
-        try:
-            driver = webdriver.Chrome(options=options)
-            driver.set_page_load_timeout(20)
-            driver.get("https://live.titan007.com/indexall_big.aspx")
-            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, "//tr[starts-with(@id, 'tr1_')]")))
-            html = driver.page_source
-            if html and "tr1_" in html: return html
-        except Exception:
-            pass
-        finally:
-            if driver:
-                try: driver.quit()
-                except: pass
+    driver = webdriver.Chrome(options=options)
+    driver.set_page_load_timeout(20)
+    
+    # 1. 正常掃描首頁
+    found_in_main = {}
+    try:
+        driver.get("https://live.titan007.com/indexall_big.aspx")
         time.sleep(2)
-    return ""
-
-def check_results():
-    load_state()
-    
-    pending_matches = {m: d for m, d in recorded_matches.items() if d['state'] == 'qualifying'}
-    if not pending_matches: 
-        print("👀 目前沒有等待結算的賽事。")
-        return
+        soup_main = BeautifulSoup(driver.page_source, 'html.parser')
+        rows = soup_main.find_all('tr', id=re.compile(r'^tr1_'))
         
-    html = fetch_main_page_html()
-    if not html: return
-        
-    soup = BeautifulSoup(html, 'html.parser')
-    rows = soup.find_all('tr', id=re.compile(r'^tr1_'))
-    
-    alerts = []
-    current_time = datetime.now()
-    
-    for tr in rows:
-        m_id = tr.get('id', '').replace('tr1_', '')
-        if m_id in pending_matches:
-            tds = tr.find_all('td')
-            status_text = (tr.find(id=f"time_{m_id}") or (tds[3] if len(tds)>3 else None))
-            status_text = status_text.text.strip() if status_text else ""
-            
-            if any(k in status_text for k in FINISHED_KEYWORDS):
-                score = None
-                for td in tds:
-                    if re.match(r'^\d+\s*-\s*\d+$', td.text.strip()):
-                        score = td.text.strip()
-                        break
+        for tr in rows:
+            m_id = tr.get('id', '').replace('tr1_', '')
+            if m_id in pending_matches:
+                tds = tr.find_all('td')
+                status_text = (tr.find(id=f"time_{m_id}") or (tds[3] if len(tds)>3 else None))
+                status_text = status_text.text.strip() if status_text else ""
                 
-                if score:
-                    # 💡 絕招：自己喺網頁抽聯賽名同球隊名，唔靠 app.py
-                    league = tds[1].text.strip() if len(tds) > 1 else "未知聯賽"
-                    home = tr.find(id=f"team1_{m_id}").text.strip() if tr.find(id=f"team1_{m_id}") else "主隊"
-                    away = tr.find(id=f"team2_{m_id}").text.strip() if tr.find(id=f"team2_{m_id}") else "客隊"
-                    
-                    # 💡 絕招：自己潛入後台重新計初盤同跌幅
-                    init_s, hits_s = fetch_match_odds(m_id)
-                    live_s = pending_matches[m_id].get('live_str', '未知')
-                    
-                    msg = f"🏁 賽果結算\n🏆 {league}\n⚽ {home} {score} {away}\n📊 凱利變化: 初[{init_s}] ➔ 終[{live_s}]\n🔻 最低項跌: {hits_s}"
-                    alerts.append(msg)
-                    recorded_matches[m_id]['state'] = 'settled'
-                    print(f"✅ 結算成功: {home} {score} {away}")
-
-    for m_id, data in recorded_matches.items():
-        if data['state'] == 'qualifying' and current_time - data['updated_at'] > timedelta(hours=48):
-            recorded_matches[m_id]['state'] = 'expired'
-
-    if alerts:
-        send_telegram_message("🔔 凱利達標賽事完場結算：\n\n" + "\n\n".join(alerts))
-        
-    save_state()
-
-if __name__ == "__main__":
-    check_results()
+                if any(k in status_text for k in FINISHED_KEYWORDS):
+                    score = None
+                    for td in tds:
