@@ -135,13 +135,13 @@
     "updated_at": "2026-11-01T06:00:39.567224"
   },
   "3102789": {
-    "state": "qualifying",
-    "live_str": "0.86/0.86/0.92",
-    "updated_at": "2026-11-01T07:30:36.888365"
+    "state": "unqualifying",
+    "live_str": "0.88/0.88/0.93",
+    "updated_at": "2026-11-01T07:45:31.430838"
   },
   "3024501": {
-    "state": "qualifying",
-    "live_str": "0.88/1.09/1.00",
-    "updated_at": "2026-11-01T07:30:36.888365"
+    "state": "unqualifying",
+    "live_str": "0.89/1.08/0.98",
+    "updated_at": "2026-11-01T07:45:31.430838"
   }
 }
