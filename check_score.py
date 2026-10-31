@@ -184,3 +184,76 @@ def check_results():
                 if any(k in status_text for k in FINISHED_KEYWORDS):
                     score = None
                     for td in tds:
+                        if re.match(r'^\d+\s*-\s*\d+$', td.text.strip()):
+                            score = td.text.strip()
+                            break
+                    if score:
+                        league = tds[1].text.strip() if len(tds) > 1 else "未知聯賽"
+                        home = tr.find(id=f"team1_{m_id}").text.strip() if tr.find(id=f"team1_{m_id}") else "主隊"
+                        away = tr.find(id=f"team2_{m_id}").text.strip() if tr.find(id=f"team2_{m_id}") else "客隊"
+                        found_in_main[m_id] = {'score': score, 'league': league, 'home': home, 'away': away}
+    except Exception as e:
+        print(f"首頁掃描異常: {e}")
+
+    alerts = []
+    current_time = datetime.now()
+    
+    for m_id, m_data in pending_matches.items():
+        score = None
+        league = m_data.get('league') or "未知聯賽"
+        home = m_data.get('home') or "主隊"
+        away = m_data.get('away') or "客隊"
+        
+        if m_id in found_in_main:
+            # 喺首頁搵到
+            score = found_in_main[m_id]['score']
+            league = found_in_main[m_id]['league']
+            home = found_in_main[m_id]['home']
+            away = found_in_main[m_id]['away']
+        else:
+            # 💡 絕招：如果首頁已經清走咗，啟動偵探模式，直接潛入詳細頁搵比分！
+            try:
+                print(f"🔍 首頁找不到賽事 {m_id}，正在潛入詳細數據頁...")
+                driver.get(f"https://vip.titan007.com/AsianOdds_n.aspx?id={m_id}")
+                time.sleep(2)
+                detail_soup = BeautifulSoup(driver.page_source, 'html.parser')
+                
+                # 從 Title 提取比分及球隊名 (格式通常為: 主隊 vs 客隊 - 2:1 - ...)
+                title_text = detail_soup.title.string if detail_soup.title else ""
+                
+                sm_score = re.search(r'(\d+)\s*[:-]\s*(\d+)', title_text)
+                if sm_score: 
+                    score = f"{sm_score.group(1)}-{sm_score.group(2)}"
+                    
+                sm_teams = re.search(r'(.*?)\s+vs\s+(.*?)\s+-', title_text)
+                if sm_teams:
+                    home = sm_teams.group(1).strip()
+                    away = sm_teams.group(2).strip()
+            except Exception as e:
+                print(f"深入查核 {m_id} 失敗: {e}")
+                
+        if score:
+            # 自己潛入後台重新計初盤同跌幅
+            init_s, live_s, hits_s = fetch_match_odds(m_id)
+            
+            msg = f"🏁 賽果結算\n🏆 {league}\n⚽ {home} {score} {away}\n📊 凱利變化: 初[{init_s}] ➔ 終[{live_s}]\n🔻 最低項跌: {hits_s}"
+            alerts.append(msg)
+            recorded_matches[m_id]['state'] = 'settled'
+            print(f"✅ 結算成功: {home} {score} {away}")
+
+    # 清理卡住超過 48 小時的無結果賽事
+    for m_id, data in recorded_matches.items():
+        if data['state'] == 'qualifying' and current_time - data['updated_at'] > timedelta(hours=48):
+            recorded_matches[m_id]['state'] = 'expired'
+            print(f"🗑️ 賽事 {m_id} 超過 48 小時未結算，已標記為過期 (expired)。")
+
+    driver.quit()
+
+    if alerts:
+        send_telegram_message("🔔 凱利達標賽事完場結算：\n\n" + "\n\n".join(alerts))
+        print(f"📨 已發送 {len(alerts)} 場賽果通知至 Telegram！")
+        
+    save_state()
+
+if __name__ == "__main__":
+    check_results()
