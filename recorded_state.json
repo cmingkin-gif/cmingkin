@@ -260,9 +260,9 @@
     "updated_at": "2026-11-06T22:45:32.866644"
   },
   "2962736": {
-    "state": "unqualifying",
-    "live_str": "0.93/0.96/1.04",
-    "updated_at": "2026-11-06T18:30:37.191590"
+    "state": "qualifying",
+    "live_str": "0.90/1.00/1.09",
+    "updated_at": "2026-11-07T06:15:30.993468"
   },
   "3074685": {
     "state": "qualifying",
@@ -495,8 +495,8 @@
     "updated_at": "2026-11-07T05:30:40.987032"
   },
   "2962742": {
-    "state": "unqualifying",
-    "live_str": "0.94/1.01/0.94",
-    "updated_at": "2026-11-07T06:00:43.545749"
+    "state": "qualifying",
+    "live_str": "0.96/1.03/0.91",
+    "updated_at": "2026-11-07T06:15:30.993468"
   }
 }
