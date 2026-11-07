@@ -502,21 +502,21 @@
   "3000164": {
     "state": "qualifying",
     "live_str": "0.96/0.91/1.01",
-    "updated_at": "2026-11-07T09:00:41.135487"
+    "updated_at": "2026-11-07T09:15:28.661325"
   },
   "3092267": {
     "state": "qualifying",
     "live_str": "0.93/0.85/0.98",
-    "updated_at": "2026-11-07T09:00:41.135487"
+    "updated_at": "2026-11-07T09:15:28.661325"
   },
   "3067150": {
-    "state": "qualifying",
-    "live_str": "0.93/0.95/0.91",
-    "updated_at": "2026-11-07T09:00:41.135487"
+    "state": "unqualifying",
+    "live_str": "0.93/0.94/0.92",
+    "updated_at": "2026-11-07T09:15:28.661325"
   },
   "3110547": {
-    "state": "qualifying",
-    "live_str": "0.97/0.86/0.79",
-    "updated_at": "2026-11-07T09:00:41.135487"
+    "state": "unqualifying",
+    "live_str": "0.92/0.89/0.88",
+    "updated_at": "2026-11-07T09:15:28.661325"
   }
 }
