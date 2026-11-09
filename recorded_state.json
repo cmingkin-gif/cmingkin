@@ -74,11 +74,6 @@
     "live_str": "1.00/0.68/0.63",
     "updated_at": "2026-11-08T20:45:31.212360"
   },
-  "3111049": {
-    "state": "unqualifying",
-    "live_str": "1.00/0.87/0.86",
-    "updated_at": "2026-11-08T19:00:44.795671"
-  },
   "2940780": {
     "state": "qualifying",
     "live_str": "1.18/1.03/0.85",
@@ -89,20 +84,10 @@
     "live_str": "0.94/0.90/0.89",
     "updated_at": "2026-11-08T19:15:29.046031"
   },
-  "3043274": {
-    "state": "qualifying",
-    "live_str": "0.87/0.97/1.00",
-    "updated_at": "2026-11-08T19:00:44.795671"
-  },
   "3006026": {
     "state": "unqualifying",
     "live_str": "0.91/0.97/0.82",
     "updated_at": "2026-11-08T19:15:29.046031"
-  },
-  "3050623": {
-    "state": "unqualifying",
-    "live_str": "1.01/0.92/0.89",
-    "updated_at": "2026-11-08T18:45:35.458286"
   },
   "3109532": {
     "state": "qualifying",
@@ -118,21 +103,6 @@
     "state": "qualifying",
     "live_str": "0.93/0.84/0.73",
     "updated_at": "2026-11-08T21:45:31.908514"
-  },
-  "3043448": {
-    "state": "unqualifying",
-    "live_str": "0.94/0.89/0.88",
-    "updated_at": "2026-11-08T19:00:44.795671"
-  },
-  "3078737": {
-    "state": "unqualifying",
-    "live_str": "0.88/1.06/1.11",
-    "updated_at": "2026-11-08T19:00:44.795671"
-  },
-  "3068186": {
-    "state": "unqualifying",
-    "live_str": "0.88/1.00/0.96",
-    "updated_at": "2026-11-08T19:00:44.795671"
   },
   "3082355": {
     "state": "qualifying",
@@ -450,9 +420,9 @@
     "updated_at": "2026-11-09T18:15:31.276924"
   },
   "3110704": {
-    "state": "qualifying",
-    "live_str": "0.92/0.87/0.89",
-    "updated_at": "2026-11-09T18:45:34.178246"
+    "state": "unqualifying",
+    "live_str": "0.93/0.89/0.90",
+    "updated_at": "2026-11-09T19:00:50.445442"
   },
   "3111637": {
     "state": "unqualifying",
@@ -472,7 +442,7 @@
   "3103237": {
     "state": "qualifying",
     "live_str": "0.95/0.92/0.89",
-    "updated_at": "2026-11-09T18:45:34.178246"
+    "updated_at": "2026-11-09T19:00:50.445442"
   },
   "3111625": {
     "state": "unqualifying",
