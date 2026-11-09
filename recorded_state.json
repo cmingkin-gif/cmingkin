@@ -9,11 +9,6 @@
     "live_str": "0.81/0.92/1.06",
     "updated_at": "2026-11-08T11:30:38.042158"
   },
-  "2953740": {
-    "state": "unqualifying",
-    "live_str": "0.89/0.94/0.84",
-    "updated_at": "2026-11-08T10:45:32.756520"
-  },
   "3086246": {
     "state": "unqualifying",
     "live_str": "0.88/0.90/0.93",
@@ -69,11 +64,6 @@
     "live_str": "0.83/0.98/0.89",
     "updated_at": "2026-11-08T20:15:32.359301"
   },
-  "3017214": {
-    "state": "unqualifying",
-    "live_str": "0.91/0.93/0.84",
-    "updated_at": "2026-11-08T10:45:32.756520"
-  },
   "3109546": {
     "state": "qualifying",
     "live_str": "0.95/0.70/0.40",
@@ -88,11 +78,6 @@
     "state": "qualifying",
     "live_str": "0.96/0.87/0.99",
     "updated_at": "2026-11-08T23:15:32.672337"
-  },
-  "3003198": {
-    "state": "unqualifying",
-    "live_str": "0.91/1.01/1.01",
-    "updated_at": "2026-11-08T11:00:41.558258"
   },
   "3071153": {
     "state": "unqualifying",
@@ -618,5 +603,10 @@
     "state": "qualifying",
     "live_str": "0.82/0.90/0.99",
     "updated_at": "2026-11-09T06:45:33.342744"
+  },
+  "3046480": {
+    "state": "qualifying",
+    "live_str": "0.97/0.95/0.87",
+    "updated_at": "2026-11-09T11:00:42.672584"
   }
 }
