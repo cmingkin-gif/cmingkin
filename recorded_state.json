@@ -572,12 +572,12 @@
   "3114030": {
     "state": "qualifying",
     "live_str": "0.90/0.87/0.91",
-    "updated_at": "2026-11-16T14:00:39.809723"
+    "updated_at": "2026-11-16T14:15:29.096719"
   },
   "3037982": {
-    "state": "unqualifying",
+    "state": "qualifying",
     "live_str": "0.93/0.95/0.87",
-    "updated_at": "2026-11-16T12:45:28.958744"
+    "updated_at": "2026-11-16T14:15:29.096719"
   },
   "3113986": {
     "state": "unqualifying",
