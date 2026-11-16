@@ -14,11 +14,6 @@
     "live_str": "1.01/0.86/0.85",
     "updated_at": "2026-11-15T20:45:28.303428"
   },
-  "3113197": {
-    "state": "unqualifying",
-    "live_str": "0.90/0.92/0.89",
-    "updated_at": "2026-11-15T17:45:32.041504"
-  },
   "3053551": {
     "state": "unqualifying",
     "live_str": "0.81/0.95/0.91",
@@ -74,20 +69,10 @@
     "live_str": "0.87/0.90/1.05",
     "updated_at": "2026-11-16T02:15:31.019065"
   },
-  "3015949": {
-    "state": "unqualifying",
-    "live_str": "0.87/0.95/1.25",
-    "updated_at": "2026-11-15T17:45:32.041504"
-  },
   "3112064": {
     "state": "unqualifying",
     "live_str": "0.95/0.90/0.94",
     "updated_at": "2026-11-15T21:45:29.247571"
-  },
-  "3111866": {
-    "state": "unqualifying",
-    "live_str": "0.87/0.90/0.95",
-    "updated_at": "2026-11-15T17:45:32.041504"
   },
   "3092904": {
     "state": "unqualifying",
@@ -108,11 +93,6 @@
     "state": "unqualifying",
     "live_str": "0.89/0.90/0.89",
     "updated_at": "2026-11-15T18:30:38.185267"
-  },
-  "3113199": {
-    "state": "qualifying",
-    "live_str": "0.94/0.85/0.89",
-    "updated_at": "2026-11-15T17:45:32.041504"
   },
   "3010100": {
     "state": "unqualifying",
@@ -148,16 +128,6 @@
     "state": "qualifying",
     "live_str": "0.89/0.94/0.78",
     "updated_at": "2026-11-15T21:30:38.608717"
-  },
-  "3022368": {
-    "state": "unqualifying",
-    "live_str": "0.87/0.90/0.97",
-    "updated_at": "2026-11-15T17:45:32.041504"
-  },
-  "3111747": {
-    "state": "unqualifying",
-    "live_str": "0.87/0.93/0.90",
-    "updated_at": "2026-11-15T17:45:32.041504"
   },
   "3050330": {
     "state": "unqualifying",
@@ -452,7 +422,7 @@
   "3037982": {
     "state": "qualifying",
     "live_str": "0.93/0.94/0.86",
-    "updated_at": "2026-11-16T17:30:40.027834"
+    "updated_at": "2026-11-16T17:45:34.616611"
   },
   "3113986": {
     "state": "unqualifying",
@@ -467,6 +437,6 @@
   "3001051": {
     "state": "qualifying",
     "live_str": "0.94/0.88/0.99",
-    "updated_at": "2026-11-16T17:30:40.027834"
+    "updated_at": "2026-11-16T17:45:34.616611"
   }
 }
