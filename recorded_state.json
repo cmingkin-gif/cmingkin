@@ -64,11 +64,6 @@
     "live_str": "0.96/0.88/0.93",
     "updated_at": "2026-11-16T02:00:41.182638"
   },
-  "3048717": {
-    "state": "qualifying",
-    "live_str": "0.93/0.88/0.92",
-    "updated_at": "2026-11-15T21:15:32.166070"
-  },
   "3060055": {
     "state": "qualifying",
     "live_str": "0.78/0.99/1.18",
@@ -88,11 +83,6 @@
     "state": "qualifying",
     "live_str": "0.83/0.99/0.89",
     "updated_at": "2026-11-15T22:15:32.995581"
-  },
-  "3054256": {
-    "state": "unqualifying",
-    "live_str": "0.94/0.91/0.82",
-    "updated_at": "2026-11-15T21:15:32.166070"
   },
   "3005599": {
     "state": "unqualifying",
