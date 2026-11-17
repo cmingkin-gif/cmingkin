@@ -25,9 +25,9 @@
     "updated_at": "2026-11-17T08:45:40.399611"
   },
   "3114049": {
-    "state": "qualifying",
-    "live_str": "0.93/0.92/0.90",
-    "updated_at": "2026-11-18T07:15:31.307949"
+    "state": "unqualifying",
+    "live_str": "0.93/0.91/0.92",
+    "updated_at": "2026-11-18T07:30:37.507609"
   },
   "3109631": {
     "state": "unqualifying",
