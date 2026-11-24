@@ -252,8 +252,14 @@ def run_scraper_once():
             status_text = status_text.text.strip() if status_text else ""
             if any(k in status_text for k in FINISHED_KEYWORDS): continue
 
-            home = (tr.find(id=f"team1_{match_id}").text.strip() if tr.find(id=f"team1_{match_id}") else "")
-            away = (tr.find(id=f"team2_{match_id}").text.strip() if tr.find(id=f"team2_{match_id}") else "")
+            # --- 修正區塊開始 ---
+            # 優先嘗試透過 ID 抓取，如果失敗則從第 5 和第 7 個欄位 (tds[4] 與 tds[6]) 中直接獲取文字
+            home_node = tr.find(id=f"team1_{match_id}")
+            home = home_node.text.strip() if home_node else (tds[4].text.strip() if len(tds) > 4 else "")
+            
+            away_node = tr.find(id=f"team2_{match_id}")
+            away = away_node.text.strip() if away_node else (tds[6].text.strip() if len(tds) > 6 else "")
+            # --- 修正區塊結束 ---
             
             raw_match_time = (tr.find(id=f"mt_{match_id}").text.strip() if tr.find(id=f"mt_{match_id}") else (tds[2].text.strip() if len(tds)>2 else ""))
             
