@@ -217,7 +217,7 @@
   "3001303": {
     "state": "qualifying",
     "live_str": "0.94/0.88/0.95",
-    "updated_at": "2026-11-25T18:30:41.172558"
+    "updated_at": "2026-11-25T18:45:27.556823"
   },
   "3108739": {
     "state": "unqualifying",
@@ -247,7 +247,7 @@
   "3001310": {
     "state": "qualifying",
     "live_str": "0.95/0.88/0.93",
-    "updated_at": "2026-11-25T18:30:41.172558"
+    "updated_at": "2026-11-25T18:45:27.556823"
   },
   "3116701": {
     "state": "unqualifying",
@@ -257,7 +257,7 @@
   "3116626": {
     "state": "qualifying",
     "live_str": "0.90/0.87/0.91",
-    "updated_at": "2026-11-25T18:30:41.172558"
+    "updated_at": "2026-11-25T18:45:27.556823"
   },
   "3116633": {
     "state": "unqualifying",
@@ -277,7 +277,7 @@
   "3033256": {
     "state": "qualifying",
     "live_str": "0.72/0.88/0.89",
-    "updated_at": "2026-11-25T18:30:41.172558"
+    "updated_at": "2026-11-25T18:45:27.556823"
   },
   "3116654": {
     "state": "unqualifying",
@@ -285,9 +285,9 @@
     "updated_at": "2026-11-25T18:00:40.799506"
   },
   "3116421": {
-    "state": "qualifying",
-    "live_str": "0.80/0.87/0.89",
-    "updated_at": "2026-11-25T18:30:41.172558"
+    "state": "unqualifying",
+    "live_str": "0.87/0.91/0.91",
+    "updated_at": "2026-11-25T18:45:27.556823"
   },
   "3114693": {
     "state": "unqualifying",
@@ -302,11 +302,21 @@
   "3116337": {
     "state": "qualifying",
     "live_str": "0.88/0.84/0.89",
-    "updated_at": "2026-11-25T18:30:41.172558"
+    "updated_at": "2026-11-25T18:45:27.556823"
   },
   "3116338": {
-    "state": "unqualifying",
-    "live_str": "0.92/0.84/0.85",
-    "updated_at": "2026-11-25T18:30:41.172558"
+    "state": "qualifying",
+    "live_str": "0.91/0.84/0.85",
+    "updated_at": "2026-11-25T18:45:27.556823"
+  },
+  "3047572": {
+    "state": "qualifying",
+    "live_str": "0.99/0.84/0.79",
+    "updated_at": "2026-11-25T18:45:27.556823"
+  },
+  "3013042": {
+    "state": "qualifying",
+    "live_str": "0.86/0.89/1.06",
+    "updated_at": "2026-11-25T18:45:27.556823"
   }
 }
