@@ -221,17 +221,17 @@
   },
   "3107651": {
     "state": "qualifying",
-    "live_str": "0.83/0.94/0.89",
-    "updated_at": "2026-11-25T11:00:42.187410"
+    "live_str": "0.82/0.94/0.91",
+    "updated_at": "2026-11-25T11:15:29.823654"
   },
   "3084203": {
-    "state": "qualifying",
+    "state": "unqualifying",
     "live_str": "0.90/0.90/0.77",
-    "updated_at": "2026-11-25T11:00:42.187410"
+    "updated_at": "2026-11-25T11:15:29.823654"
   },
   "3017177": {
-    "state": "qualifying",
-    "live_str": "1.06/0.82/0.78",
-    "updated_at": "2026-11-25T11:00:42.187410"
+    "state": "unqualifying",
+    "live_str": "0.86/0.84/0.90",
+    "updated_at": "2026-11-25T11:15:29.823654"
   }
 }
