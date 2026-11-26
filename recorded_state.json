@@ -14,11 +14,6 @@
     "live_str": "0.95/0.88/0.93",
     "updated_at": "2026-11-25T19:15:30.984407"
   },
-  "3116701": {
-    "state": "unqualifying",
-    "live_str": "0.91/0.82/0.69",
-    "updated_at": "2026-11-25T18:30:41.172558"
-  },
   "3116626": {
     "state": "unqualifying",
     "live_str": "0.99/0.72/1.01",
@@ -48,16 +43,6 @@
     "state": "unqualifying",
     "live_str": "0.87/0.91/0.91",
     "updated_at": "2026-11-25T18:45:27.556823"
-  },
-  "3114693": {
-    "state": "unqualifying",
-    "live_str": "0.87/0.97/0.99",
-    "updated_at": "2026-11-25T18:30:41.172558"
-  },
-  "3104321": {
-    "state": "unqualifying",
-    "live_str": "0.86/0.95/0.96",
-    "updated_at": "2026-11-25T18:30:41.172558"
   },
   "3116337": {
     "state": "unqualifying",
@@ -145,9 +130,9 @@
     "updated_at": "2026-11-26T13:30:40.331313"
   },
   "3074555": {
-    "state": "qualifying",
-    "live_str": "0.84/0.87/0.92",
-    "updated_at": "2026-11-26T18:15:31.867160"
+    "state": "unqualifying",
+    "live_str": "0.86/0.90/0.97",
+    "updated_at": "2026-11-26T18:30:41.256147"
   },
   "3116730": {
     "state": "unqualifying",
@@ -165,9 +150,9 @@
     "updated_at": "2026-11-26T14:00:46.284370"
   },
   "2940953": {
-    "state": "qualifying",
-    "live_str": "0.98/0.90/0.80",
-    "updated_at": "2026-11-26T18:15:31.867160"
+    "state": "unqualifying",
+    "live_str": "0.95/0.90/0.84",
+    "updated_at": "2026-11-26T18:30:41.256147"
   },
   "3114724": {
     "state": "unqualifying",
@@ -215,13 +200,23 @@
     "updated_at": "2026-11-26T17:45:33.555785"
   },
   "3070837": {
-    "state": "qualifying",
-    "live_str": "0.96/0.80/0.53",
-    "updated_at": "2026-11-26T18:15:31.867160"
+    "state": "unqualifying",
+    "live_str": "0.92/0.84/0.66",
+    "updated_at": "2026-11-26T18:30:41.256147"
   },
   "3114952": {
     "state": "qualifying",
     "live_str": "0.91/0.92/0.78",
-    "updated_at": "2026-11-26T18:15:31.867160"
+    "updated_at": "2026-11-26T18:30:41.256147"
+  },
+  "3086102": {
+    "state": "qualifying",
+    "live_str": "0.90/0.93/0.81",
+    "updated_at": "2026-11-26T18:30:41.256147"
+  },
+  "3116820": {
+    "state": "qualifying",
+    "live_str": "0.88/0.88/0.91",
+    "updated_at": "2026-11-26T18:30:41.256147"
   }
 }
